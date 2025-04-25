@@ -1,6 +1,8 @@
 
-from pyspark.sql import DataFrame, SparkSession
+from pyspark.sql import DataFrame
 import pyspark.sql.functions as f
+
+from clinical_mining.utils.spark import SparkSession
 
 def assign_drug_id(df, molecule):
     df_w_id = (
@@ -31,20 +33,18 @@ def assign_disease_id(df, diseases):
     print(f"Mapped rows: {df_w_id.filter(f.col('disease_id').isNotNull()).count()}")
     return df_w_id
 
-def process_molecule(path: str) -> DataFrame:
+def process_molecule(spark_session: SparkSession, path: str) -> DataFrame:
     return (
-    SparkSession.builder.getOrCreate()
-    .read.parquet("molecule").select("id", f.lower("name").alias("name"), "synonyms")
+    spark_session.session.read.parquet(path).select("id", f.lower("name").alias("name"), "synonyms")
     .withColumn("synonyms", f.transform(f.col("synonyms"), lambda x: f.lower(x)))
     .withColumn("drug_names", f.array_union(f.array(f.col("name")), f.col("synonyms")))
     .selectExpr("id as drug_id", "drug_names")
     .persist()
 )
 
-def process_disease(path: str) -> DataFrame:
+def process_disease(spark_session: SparkSession, path: str) -> DataFrame:
     return (
-        SparkSession.builder.getOrCreate()
-        .read.parquet(path)
+        spark_session.session.read.parquet(path)
         .select("id", f.lower("name").alias("name"), "synonyms")
         .withColumn(
             "synonyms",

@@ -1,0 +1,39 @@
+db_properties:
+  url: "aact-db.ctti-clinicaltrials.org:5432/aact"
+  schema: ctgov
+  user: ???
+  password: ???
+
+datasets:
+  disease_path: /Users/irenelopez/EBI/repos/clinical_mining/data/disease #???
+  molecule_path: /Users/irenelopez/EBI/repos/clinical_mining/data/drug_molecule #???
+  output_path: "/Users/irenelopez/EBI/repos/clinical_mining/data/aact_trials" #???
+
+db_tables:
+  studies:
+    - nct_id
+    - overall_status
+    - phase
+    - study_type
+    - is_fda_regulated_drug
+
+  interventions:
+    - nct_id
+    - intervention_type
+    - name
+
+  browse_interventions:
+    - id
+    - nct_id
+    - mesh_term
+    - downcase_mesh_term
+    - mesh_type
+
+  conditions:
+    - nct_id
+    - downcase_name
+
+  browse_conditions:
+    - nct_id
+    - downcase_mesh_term
+    - mesh_type
