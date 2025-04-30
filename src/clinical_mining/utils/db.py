@@ -47,25 +47,23 @@ class AACTConnector:
         """
         full_table_name = f"{self.schema}.{table_name}"
 
-        if limit:
-            if select_cols:
-                select_cols = (
-                    ", ".join(select_cols)
-                    if isinstance(select_cols, list)
-                    else select_cols
-                )
-            query = (
-                f"(SELECT {select_cols} FROM {full_table_name} LIMIT {limit}) as tmp"
+        if select_cols:
+            select_cols = (
+                ", ".join(select_cols)
+                if isinstance(select_cols, list)
+                else select_cols
             )
-            return self.spark.session.read.jdbc(
-                url=self.jdbc_url, table=query, properties=self.connection_properties
-            )
+            query = f"SELECT {select_cols} FROM {full_table_name}"
         else:
-            return self.spark.session.read.jdbc(
-                url=self.jdbc_url,
-                table=full_table_name,
-                properties=self.connection_properties,
+            query = f"SELECT * FROM {full_table_name}"
+        if limit is not None:
+            query += f" LIMIT {limit}"
+        print(query)
+        subquery = f"(SELECT {select_cols} FROM {full_table_name}) as t"
+        return self.spark.session.read.jdbc(
+                url=self.jdbc_url, table=subquery, properties=self.connection_properties
             )
+
 
     def print_table_schema(self, table_name: str) -> None:
         """Get schema for a table"""
