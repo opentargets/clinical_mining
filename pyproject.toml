@@ -10,6 +10,11 @@ dependencies = [
     "pyspark>=3.5.5",
 ]
 
+[project.optional-dependencies]
+dev = [
+  "biopython>=1.85"
+]
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/clinical_mining"]
 
