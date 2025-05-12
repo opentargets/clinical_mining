@@ -15,7 +15,9 @@ db_tables:
     - overall_status
     - phase
     - study_type
-    - is_fda_regulated_drug
+    - completion_date
+    - why_stopped
+    - number_of_arms
 
   interventions:
     - nct_id
@@ -37,3 +39,13 @@ db_tables:
     - nct_id
     - downcase_mesh_term
     - mesh_type
+
+  study_references:
+    - nct_id
+    - pmid
+    - reference_type
+
+  designs:
+    - nct_id
+    - primary_purpose
+  

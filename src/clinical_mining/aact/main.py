@@ -21,6 +21,7 @@ from clinical_mining.aact.utils import (
 def main(
     cfg: DictConfig,
 ) -> DataFrame:
+    print(cfg)
     db = AACTConnector(
         db_url=cfg["db_properties"]["url"],
         user=cfg["db_properties"]["user"],
@@ -28,7 +29,7 @@ def main(
         schema=cfg["db_properties"]["schema"],
     )
 
-    # LOAD TABLES
+    ## Load Data
     studies = db.load_table(
         "studies",
         select_cols=list(cfg["db_tables"]["studies"]),
@@ -71,15 +72,17 @@ def main(
         .distinct()
     )
 
-    joined_interventions = (
-        interventions.selectExpr("nct_id", "name")
-        .join(browse_interventions.selectExpr("nct_id", "mesh_term"), "nct_id", "left")
-        .withColumn("drug_label", f.coalesce(f.col("mesh_term"), f.col("name")))
-        .drop("name", "mesh_term")
-        .distinct()
-    )
+    study_references = db.load_table(
+        "study_references",
+        select_cols=list(cfg["db_tables"]["study_references"]),
+    ).distinct()
 
-    """### Annotate condition in a study"""
+    study_design = db.load_table(
+        "designs",
+        select_cols=list(cfg["db_tables"]["designs"]),
+    ).distinct()
+    
+    ## Annotate condition in a study
     joined_conditions = (
         conditions.selectExpr("nct_id", "downcase_name")
         .join(browse_conditions.selectExpr("nct_id", "mesh_term"), "nct_id", "left")
@@ -90,7 +93,14 @@ def main(
         .distinct()
     )
 
-    """### Putting things together"""
+    ## Putting things together
+    joined_interventions = (
+        interventions.selectExpr("nct_id", "name")
+        .join(browse_interventions.selectExpr("nct_id", "mesh_term"), "nct_id", "left")
+        .withColumn("drug_label", f.coalesce(f.col("mesh_term"), f.col("name")))
+        .drop("name", "mesh_term")
+        .distinct()
+    )
 
     int_studies = (
         studies.filter(f.col("study_type") == "INTERVENTIONAL")
@@ -104,6 +114,17 @@ def main(
             on="nct_id",
             how="inner",
         )
+        .join(
+            study_design.selectExpr("nct_id", "primary_purpose as purpose"),
+            on="nct_id",
+            how="inner",
+        )
+        .join(
+            study_references, 
+            on="nct_id",
+            how="left",
+        )
+        .drop("study_type")
         .distinct()
     ).persist()
 
@@ -119,6 +140,7 @@ def main(
     trials_mapped_drug_disease.write.parquet(
         f"{cfg['datasets']['output_path']}_{date}", mode="overwrite"
     )
+    db.spark.stop()
     return trials_mapped_drug_disease
 
 
