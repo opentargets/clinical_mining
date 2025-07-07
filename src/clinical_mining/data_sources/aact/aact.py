@@ -20,8 +20,9 @@ def process_interventions(
     Returns:
         DataFrame: Interventions table with MeSH terms
     """
+    INTERVENTION_WHITELIST = ["DRUG", "COMBINATION_PRODUCT", "BIOLOGICAL"]
     interventions = (
-        interventions.filter(f.col("intervention_type") == "DRUG")
+        interventions.filter(f.col("intervention_type").isin(INTERVENTION_WHITELIST))
         # Drop studies where the intervention is placebo
         .filter(~f.lower("name").contains("placebo"))
         .distinct()
