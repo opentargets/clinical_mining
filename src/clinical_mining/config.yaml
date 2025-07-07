@@ -5,9 +5,10 @@ db_properties:
   password: ???
 
 datasets:
-  disease_path: /Users/irenelopez/EBI/repos/clinical_mining/data/disease #???
-  molecule_path: /Users/irenelopez/EBI/repos/clinical_mining/data/drug_molecule #???
-  output_path: "/Users/irenelopez/EBI/repos/clinical_mining/data/aact_trials" #???
+  chembl_indications_path: /Users/irenelopez/EBI/repos/clinical_mining/data/inputs/chembl_drug_indication.jsonl #???
+  disease_path: /Users/irenelopez/EBI/repos/clinical_mining/data/inputs/disease #???
+  molecule_path: /Users/irenelopez/EBI/repos/clinical_mining/data/inputs/drug_molecule #???
+  output_path: "/Users/irenelopez/EBI/repos/clinical_mining/data/outputs/clinical_trials" #???
 
 db_tables:
   studies:

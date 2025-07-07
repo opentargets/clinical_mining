@@ -11,9 +11,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = [
-  "biopython>=1.85"
-]
+dev = []
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/clinical_mining"]

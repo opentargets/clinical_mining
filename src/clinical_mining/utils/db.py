@@ -59,7 +59,7 @@ class AACTConnector:
         subquery = f"({query}) as t"
         return self.spark.session.read.jdbc(
             url=self.jdbc_url, table=subquery, properties=self.connection_properties
-        )
+        ).distinct()
 
     def print_table_schema(self, table_name: str) -> None:
         """Get schema for a table"""
