@@ -5,7 +5,7 @@ import hydra
 from omegaconf import DictConfig
 from pyspark.sql import DataFrame
 
-from clinical_mining.utils.db import AACTConnector
+from clinical_mining.utils.spark import SparkSession
 from clinical_mining.utils.utils import assign_approval_status
 from clinical_mining.data_sources.aact.aact import extract_aact_indications
 from clinical_mining.data_sources.chembl.indications import extract_chembl_indications
@@ -24,49 +24,49 @@ def main(
     cfg: DictConfig,
 ) -> DataFrame:
     print(cfg)
-    db = AACTConnector(
-        db_url=cfg["db_properties"]["url"],
-        user=cfg["db_properties"]["user"],
-        password=cfg["db_properties"]["password"],
-        schema=cfg["db_properties"]["schema"],
+    spark = SparkSession(
+        db_url=cfg.get("db_properties", {}).get("url"),
+        user=cfg.get("db_properties", {}).get("user"),
+        password=cfg.get("db_properties", {}).get("password"),
+        schema=cfg.get("db_properties", {}).get("schema"),
     )
 
     #### DATA LOADING
-    studies = db.load_table(
+    studies = spark.load_table(
         "studies",
         select_cols=list(cfg["db_tables"]["studies"]),
     )
     interventions = (
-        db.load_table(
+        spark.load_table(
             "interventions",
             select_cols=list(cfg["db_tables"]["interventions"]),
         )
     )
     browse_interventions = (
-        db.load_table(
+        spark.load_table(
             "browse_interventions",
             select_cols=list(cfg["db_tables"]["browse_interventions"]),
         )
     )
-    conditions = db.load_table(
+    conditions = spark.load_table(
         "conditions",
         select_cols=list(cfg["db_tables"]["conditions"]),
     )
     browse_conditions = (
-        db.load_table(
+        spark.load_table(
             "browse_conditions",
             select_cols=list(cfg["db_tables"]["browse_conditions"]),
         )
     )
-    study_references = db.load_table(
+    study_references = spark.load_table(
         "study_references",
         select_cols=list(cfg["db_tables"]["study_references"]),
     )
-    study_design = db.load_table(
+    study_design = spark.load_table(
         "designs",
         select_cols=list(cfg["db_tables"]["designs"]),
     )
-    chembl_indications_raw = db.spark.session.read.json(cfg["datasets"]["chembl_indications_path"]) ## FIXME DB naming
+    chembl_indications_raw = spark.session.read.json(cfg["datasets"]["chembl_indications_path"])
     
 
     ##### DRUG/DISEASE EXTRACTION
@@ -84,11 +84,11 @@ def main(
 
     ##### DRUG/DISEASE MAPPING
     trials_mapped_drug = assign_drug_id(
-        indications, process_molecule(db.spark, cfg["datasets"]["molecule_path"]), verbose=False
+        indications, process_molecule(spark, cfg["datasets"]["molecule_path"]), verbose=False
     )
 
     trials_mapped_drug_disease = assign_disease_id(
-        trials_mapped_drug, process_disease(db.spark, cfg["datasets"]["disease_path"]), verbose=False
+        trials_mapped_drug, process_disease(spark, cfg["datasets"]["disease_path"]), verbose=False
     )
 
 
@@ -98,7 +98,7 @@ def main(
     df.write.parquet(
         f"{cfg['datasets']['output_path']}/{date}", mode="overwrite"
     )
-    db.spark.stop()
+    spark.stop()
     return df
 
 

@@ -1,5 +1,5 @@
 from psutil import virtual_memory
-from pyspark.sql import SparkSession as PySparkSession
+from pyspark.sql import DataFrame, SparkSession as PySparkSession
 
 def detect_spark_memory_limit() -> int:
     """Detects available memory (in GiB) and reserves 90% for Spark."""
@@ -8,13 +8,25 @@ def detect_spark_memory_limit() -> int:
 
 class SparkSession:
     """
-    Manages a Spark session with sensible memory defaults and user config."""
-    def __init__(self, config: dict[str, str] = {}):
+    Manages a Spark session with sensible memory defaults and user config, with an optional DB connection."""
+    def __init__(self, db_url: str = None, user: str = None, password: str = None, schema: str = "ctgov", config: dict[str, str] = {}):
         spark_mem_limit = detect_spark_memory_limit()
         default_config = {
             "spark.driver.memory": f"{spark_mem_limit}g",
             "spark.executor.memory": f"{spark_mem_limit}g",
         }
+        if db_url and user and password:
+            default_config["spark.jars.packages"] = "org.postgresql:postgresql:42.6.0"
+            self.jdbc_url = f"jdbc:postgresql://{db_url}"
+            self.connection_properties = {
+                "user": user,
+                "password": password,
+                "driver": "org.postgresql.Driver",
+                "ssl": "true",
+                "sslmode": "require",
+            }
+            self.schema = schema
+        
         merged_config = {**default_config, **config}
         builder = PySparkSession.builder.appName("Clinical Mining")
         for k, v in merged_config.items():
@@ -27,3 +39,43 @@ class SparkSession:
 
     def stop(self):
         self._session.stop()
+
+    def load_table(
+        self,
+        table_name: str,
+        limit: int | None = None,
+        select_cols: list[str] | str | None = None,
+    ) -> DataFrame:
+        """
+        Load a table from a database.
+
+        Args:
+            table_name: Name of the table to load
+            limit: Optional row limit for testing
+
+        Returns:
+            A Spark DataFrame containing the table data
+        """
+        if not self.jdbc_url or not self.connection_properties or not self.schema:
+            raise ConnectionError("Database connection not configured. Please provide db_url, user, and password during SparkSession initialization.")
+        
+        full_table_name = f"{self.schema}.{table_name}"
+
+        if select_cols is not None:
+            select_cols = (
+                ", ".join(select_cols) if isinstance(select_cols, list) else select_cols
+            )
+            query = f"SELECT {select_cols} FROM {full_table_name}"
+        else:
+            query = f"SELECT * FROM {full_table_name}"
+        if limit is not None:
+            query += f" LIMIT {limit}"
+        subquery = f"({query}) as t"
+        return self.session.read.jdbc(
+            url=self.jdbc_url, table=subquery, properties=self.connection_properties
+        ).distinct()
+
+    def print_table_schema(self, table_name: str) -> None:
+        """Get schema for a table"""
+        limited_df = self.load_table(table_name, limit=1)
+        limited_df.printSchema()
