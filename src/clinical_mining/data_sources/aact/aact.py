@@ -90,7 +90,7 @@ def extract_aact_indications(
         .join(
             study_design.selectExpr("nct_id", "primary_purpose as purpose"),
             on="nct_id",
-            how="inner",
+            how="left",
         )
         .join(
             study_references,

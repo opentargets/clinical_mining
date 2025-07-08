@@ -1,15 +1,24 @@
 from psutil import virtual_memory
 from pyspark.sql import DataFrame, SparkSession as PySparkSession
 
+
 def detect_spark_memory_limit() -> int:
     """Detects available memory (in GiB) and reserves 90% for Spark."""
     mem_gib = virtual_memory().total >> 30
     return int(mem_gib * 0.9)
 
+
 class SparkSession:
-    """
-    Manages a Spark session with sensible memory defaults and user config, with an optional DB connection."""
-    def __init__(self, db_url: str = None, user: str = None, password: str = None, schema: str = "ctgov", config: dict[str, str] = {}):
+    """Manages a Spark session with sensible memory defaults and user config, with an optional PostgreSQL connection."""
+
+    def __init__(
+        self,
+        db_url: str | None = None,
+        user: str | None = None,
+        password: str | None = None,
+        schema: str | None = None,
+        config: dict[str, str] = {},
+    ):
         spark_mem_limit = detect_spark_memory_limit()
         default_config = {
             "spark.driver.memory": f"{spark_mem_limit}g",
@@ -26,7 +35,7 @@ class SparkSession:
                 "sslmode": "require",
             }
             self.schema = schema
-        
+
         merged_config = {**default_config, **config}
         builder = PySparkSession.builder.appName("Clinical Mining")
         for k, v in merged_config.items():
@@ -57,8 +66,10 @@ class SparkSession:
             A Spark DataFrame containing the table data
         """
         if not self.jdbc_url or not self.connection_properties or not self.schema:
-            raise ConnectionError("Database connection not configured. Please provide db_url, user, and password during SparkSession initialization.")
-        
+            raise ConnectionError(
+                "Database connection not configured. Please provide db_url, user, and password during SparkSession initialization."
+            )
+
         full_table_name = f"{self.schema}.{table_name}"
 
         if select_cols is not None:
