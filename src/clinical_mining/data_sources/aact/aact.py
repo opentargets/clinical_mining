@@ -24,7 +24,7 @@ def process_interventions(
     interventions = (
         interventions.filter(f.col("intervention_type").isin(INTERVENTION_WHITELIST))
         # Drop studies where the intervention is placebo
-        .filter(~f.lower("name").contains("placebo"))
+        .filter(~f.lower("name").startswith("placebo"))
         .distinct()
     )
     browse_interventions = browse_interventions.filter(
