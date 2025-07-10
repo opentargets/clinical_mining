@@ -69,11 +69,12 @@ def extract_clinical_trials(
     Returns:
         DataFrame: The processed studies
     """
-    studies = studies.filter(f.col("study_type") == "INTERVENTIONAL")
+    STUDY_TYPES = ["INTERVENTIONAL", "OBSERVATIONAL", "EXPANDED_ACCESS"]
+    studies = studies.filter(f.col("study_type").isin(STUDY_TYPES))
     if additional_metadata is not None:
         for metadata_df in additional_metadata:
             studies = studies.join(metadata_df, on="nct_id", how="left")
-    return studies.drop("study_type")
+    return studies
 
 
 def extract_drug_indications(
