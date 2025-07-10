@@ -27,18 +27,12 @@ def process_interventions(
         .filter(~f.lower("name").contains("placebo"))
         .distinct()
     )
-    browse_interventions = (
-        browse_interventions
-        # filter list of studies
-        .join(interventions.select("nct_id"), "nct_id")
-        # Get the direct mapping
-        .filter(f.col("mesh_type") == "mesh-list")
-        .selectExpr("nct_id", "downcase_mesh_term as mesh_term")
-        .distinct()
-    )
+    browse_interventions = browse_interventions.filter(
+        f.col("mesh_type") == "mesh-list"
+    ).selectExpr("nct_id", "downcase_mesh_term as mesh_term")
+
     return (
-        interventions.selectExpr("nct_id", "name")
-        .join(browse_interventions.selectExpr("nct_id", "mesh_term"), "nct_id", "left")
+        interventions.join(browse_interventions, "nct_id", "left")
         .withColumn("drug_name", f.coalesce(f.col("mesh_term"), f.col("name")))
         .drop("name", "mesh_term")
         .distinct()
@@ -49,7 +43,7 @@ def process_conditions(
     conditions: DataFrame, browse_conditions: DataFrame
 ) -> DataFrame:
     browse_conditions = (
-        browse_conditions.filter(f.col("mesh_type") == "mesh-list")
+        browse_conditions.join(conditions.select("nct_id"), "nct_id", "left").filter(f.col("mesh_type") == "mesh-list")
         .selectExpr("nct_id", "downcase_mesh_term as mesh_term")
         .distinct()
     )
@@ -64,20 +58,35 @@ def process_conditions(
     )
 
 
-def extract_aact_indications(
+def extract_clinical_trials(
+    studies: DataFrame, additional_metadata: list[DataFrame] | None = None
+) -> DataFrame:
+    """Return clinical trials with desired extra annotations from other tables.
+
+    Args:
+        studies (DataFrame): The studies to process
+        additional_metadata (list[DataFrame] | None): Optional list of DataFrames to join on and add additional trial metadata
+    Returns:
+        DataFrame: The processed studies
+    """
+    studies = studies.filter(f.col("study_type") == "INTERVENTIONAL")
+    if additional_metadata is not None:
+        for metadata_df in additional_metadata:
+            studies = studies.join(metadata_df, on="nct_id", how="left")
+    return studies.drop("study_type")
+
+
+def extract_drug_indications(
     studies: DataFrame,
     interventions: DataFrame,
     conditions: DataFrame,
     browse_conditions: DataFrame,
     browse_interventions: DataFrame,
-    study_references: DataFrame,
-    study_design: DataFrame,
 ) -> DataFrame:
     processed_interventions = process_interventions(interventions, browse_interventions)
     processed_conditions = process_conditions(conditions, browse_conditions)
     return (
-        studies.filter(f.col("study_type") == "INTERVENTIONAL")
-        .join(
+        studies.join(
             processed_interventions,
             on="nct_id",
             how="inner",
@@ -87,21 +96,10 @@ def extract_aact_indications(
             on="nct_id",
             how="inner",
         )
-        .join(
-            study_design.selectExpr("nct_id", "primary_purpose as purpose"),
-            on="nct_id",
-            how="left",
-        )
-        .join(
-            study_references,
-            on="nct_id",
-            how="left",
-        )
         .withColumn("source", f.lit("AACT"))
         .withColumn(
             "url",
             f.concat(f.lit("https://clinicaltrials.gov/search?term="), f.col("nct_id")),
         )
-        .drop("study_type")
         .distinct()
     )

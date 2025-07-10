@@ -7,7 +7,10 @@ from pyspark.sql import DataFrame
 
 from clinical_mining.utils.spark import SparkSession
 from clinical_mining.utils.utils import assign_approval_status
-from clinical_mining.data_sources.aact.aact import extract_aact_indications
+from clinical_mining.data_sources.aact.aact import (
+    extract_drug_indications,
+    extract_clinical_trials,
+)
 from clinical_mining.data_sources.chembl.indications import extract_chembl_indications
 from clinical_mining.data_sources.aact.mapping_utils import (
     assign_drug_id,
@@ -36,27 +39,21 @@ def main(
         "studies",
         select_cols=list(cfg["db_tables"]["studies"]),
     )
-    interventions = (
-        spark.load_table(
-            "interventions",
-            select_cols=list(cfg["db_tables"]["interventions"]),
-        )
+    interventions = spark.load_table(
+        "interventions",
+        select_cols=list(cfg["db_tables"]["interventions"]),
     )
-    browse_interventions = (
-        spark.load_table(
-            "browse_interventions",
-            select_cols=list(cfg["db_tables"]["browse_interventions"]),
-        )
+    browse_interventions = spark.load_table(
+        "browse_interventions",
+        select_cols=list(cfg["db_tables"]["browse_interventions"]),
     )
     conditions = spark.load_table(
         "conditions",
         select_cols=list(cfg["db_tables"]["conditions"]),
     )
-    browse_conditions = (
-        spark.load_table(
-            "browse_conditions",
-            select_cols=list(cfg["db_tables"]["browse_conditions"]),
-        )
+    browse_conditions = spark.load_table(
+        "browse_conditions",
+        select_cols=list(cfg["db_tables"]["browse_conditions"]),
     )
     study_references = spark.load_table(
         "study_references",
@@ -66,38 +63,45 @@ def main(
         "designs",
         select_cols=list(cfg["db_tables"]["designs"]),
     )
-    chembl_indications_raw = spark.session.read.json(cfg["datasets"]["chembl_indications_path"])
-    
+    chembl_indications_raw = spark.session.read.json(
+        cfg["datasets"]["chembl_indications_path"]
+    )
+
+    ##### CLINICAL TRIAL EXTRACTION
+    trials = extract_clinical_trials(
+        studies, additional_metadata=[study_references, study_design]
+    )
 
     ##### DRUG/DISEASE EXTRACTION
-    aact_indications = extract_aact_indications(
-        studies,
+    aact_indications = extract_drug_indications(
+        trials,
         interventions,
         conditions,
         browse_conditions,
         browse_interventions,
-        study_references,
-        study_design,
     )
     chembl_indications = extract_chembl_indications(chembl_indications_raw)
-    indications = aact_indications.unionByName(chembl_indications, allowMissingColumns=True).persist()
+    indications = aact_indications.unionByName(
+        chembl_indications, allowMissingColumns=True
+    ).persist()
 
     ##### DRUG/DISEASE MAPPING
     trials_mapped_drug = assign_drug_id(
-        indications, process_molecule(spark, cfg["datasets"]["molecule_path"]), verbose=False
+        indications,
+        process_molecule(spark, cfg["datasets"]["molecule_path"]),
+        verbose=False,
     )
 
     trials_mapped_drug_disease = assign_disease_id(
-        trials_mapped_drug, process_disease(spark, cfg["datasets"]["disease_path"]), verbose=False
+        trials_mapped_drug,
+        process_disease(spark, cfg["datasets"]["disease_path"]),
+        verbose=False,
     )
-
 
     ##### APPROVAL ASSIGNMENT
     df = assign_approval_status(trials_mapped_drug_disease)
-    
-    df.write.parquet(
-        f"{cfg['datasets']['output_path']}/{date}", mode="overwrite"
-    )
+
+    df.write.parquet(f"{cfg['datasets']['output_path']}/{date}", mode="overwrite")
     spark.stop()
     return df
 
