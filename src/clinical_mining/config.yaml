@@ -10,43 +10,72 @@ datasets:
   molecule_path: /Users/irenelopez/EBI/repos/clinical_mining/data/inputs/drug_molecule #???
   output_path: "/Users/irenelopez/EBI/repos/clinical_mining/data/outputs/clinical_trials" #???
 
-db_tables:
-  studies:
-    - nct_id
-    - overall_status
-    - phase
-    - study_type
-    - completion_date
-    - why_stopped
-    - number_of_arms
+inputs:
+  - name: studies
+    type: db_table
+    role: main_df
+    select_cols:
+      - nct_id
+      - overall_status
+      - phase
+      - study_type
+      - completion_date
+      - why_stopped
+      - number_of_arms
 
-  interventions:
-    - nct_id
-    - intervention_type
-    - name
+  - name: interventions
+    type: db_table
+    select_cols:
+      - nct_id
+      - intervention_type
+      - name
 
-  browse_interventions:
-    - id
-    - nct_id
-    - mesh_term
-    - downcase_mesh_term
-    - mesh_type
+  - name: browse_interventions
+    type: db_table
+    select_cols:
+      - id
+      - nct_id
+      - mesh_term
+      - downcase_mesh_term
+      - mesh_type
 
-  conditions:
-    - nct_id
-    - downcase_name
+  - name: conditions
+    type: db_table
+    select_cols:
+      - nct_id
+      - downcase_name
 
-  browse_conditions:
-    - nct_id
-    - downcase_mesh_term
-    - mesh_type
+  - name: browse_conditions
+    type: db_table
+    select_cols:
+      - nct_id
+      - downcase_mesh_term
+      - mesh_type
 
-  study_references:
-    - nct_id
-    - pmid
-    - reference_type
+  - name: study_references
+    type: db_table
+    role: metadata
+    select_cols:
+      - nct_id
+      - pmid
+      - reference_type
 
-  designs:
-    - nct_id
-    - primary_purpose
+  - name: designs
+    type: db_table
+    role: metadata
+    select_cols:
+      - nct_id
+      - primary_purpose
+
+  - name: brief_summaries
+    type: db_table
+    role: metadata
+    select_cols:
+      - nct_id
+      - description
+
+  - name: chembl_indications_raw
+    type: file
+    format: json
+    path: ${datasets.chembl_indications_path}
   

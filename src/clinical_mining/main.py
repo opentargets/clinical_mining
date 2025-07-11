@@ -7,6 +7,7 @@ from pyspark.sql import DataFrame
 
 from clinical_mining.utils.spark import SparkSession
 from clinical_mining.utils.utils import assign_approval_status
+from clinical_mining.utils.utils import call_with_dependencies
 from clinical_mining.data_sources.aact.aact import (
     extract_drug_indications,
     extract_clinical_trials,
@@ -35,71 +36,58 @@ def main(
     )
 
     #### DATA LOADING
-    studies = spark.load_table(
-        "studies",
-        select_cols=list(cfg["db_tables"]["studies"]),
+    data_sources = {}
+    for source in cfg.inputs:
+        name = source.name
+        source_type = source.type
+        print(f"Loading {name} from {source_type}...")
+        if source_type == "db_table":
+            data_sources[name] = spark.load_table(
+                name,
+                select_cols=list(source.select_cols),
+            )
+        elif source_type == "file":
+            data_sources[name] = spark.session.read.format(source.format).load(
+                source.path
+            )
+
+    # Prepare dynamic arguments for functions that need them
+    data_sources["additional_metadata"] = [
+        data_sources[source.name]
+        for source in cfg.inputs
+        if source.get("role") == "metadata"
+    ]
+    data_sources["molecule"] = process_molecule(
+        spark, cfg["datasets"]["molecule_path"]
     )
-    interventions = spark.load_table(
-        "interventions",
-        select_cols=list(cfg["db_tables"]["interventions"]),
-    )
-    browse_interventions = spark.load_table(
-        "browse_interventions",
-        select_cols=list(cfg["db_tables"]["browse_interventions"]),
-    )
-    conditions = spark.load_table(
-        "conditions",
-        select_cols=list(cfg["db_tables"]["conditions"]),
-    )
-    browse_conditions = spark.load_table(
-        "browse_conditions",
-        select_cols=list(cfg["db_tables"]["browse_conditions"]),
-    )
-    study_references = spark.load_table(
-        "study_references",
-        select_cols=list(cfg["db_tables"]["study_references"]),
-    )
-    study_design = spark.load_table(
-        "designs",
-        select_cols=list(cfg["db_tables"]["designs"]),
-    )
-    chembl_indications_raw = spark.session.read.json(
-        cfg["datasets"]["chembl_indications_path"]
+    data_sources["disease"] = process_disease(
+        spark, cfg["datasets"]["disease_path"]
     )
 
-    ##### CLINICAL TRIAL EXTRACTION
-    trials = extract_clinical_trials(
-        studies, additional_metadata=[study_references, study_design]
-    )
+    # Define the pipeline steps, specifying the output name for each
+    pipeline_steps = [
+        {"name": "trials", "func": extract_clinical_trials},
+        {"name": "aact_indications", "func": extract_drug_indications},
+        {"name": "chembl_indications", "func": extract_chembl_indications},
+        {
+            "name": "indications",
+            "func": lambda aact_indications, chembl_indications: aact_indications.unionByName(
+                chembl_indications, allowMissingColumns=True
+            ).persist(),
+        },
+        {"name": "trials_mapped_drug", "func": assign_drug_id},
+        {"name": "trials_mapped_drug_disease", "func": assign_disease_id},
+        {"name": "final_df", "func": assign_approval_status},
+    ]
 
-    ##### DRUG/DISEASE EXTRACTION
-    aact_indications = extract_drug_indications(
-        trials,
-        interventions,
-        conditions,
-        browse_conditions,
-        browse_interventions,
-    )
-    chembl_indications = extract_chembl_indications(chembl_indications_raw)
-    indications = aact_indications.unionByName(
-        chembl_indications, allowMissingColumns=True
-    ).persist()
+    # Execute the pipeline
+    for step in pipeline_steps:
+        output_name = step["name"]
+        func = step["func"]
+        print(f"Executing step: {output_name}")
+        data_sources[output_name] = call_with_dependencies(func, data_sources)
 
-    ##### DRUG/DISEASE MAPPING
-    trials_mapped_drug = assign_drug_id(
-        indications,
-        process_molecule(spark, cfg["datasets"]["molecule_path"]),
-        verbose=False,
-    )
-
-    trials_mapped_drug_disease = assign_disease_id(
-        trials_mapped_drug,
-        process_disease(spark, cfg["datasets"]["disease_path"]),
-        verbose=False,
-    )
-
-    ##### APPROVAL ASSIGNMENT
-    df = assign_approval_status(trials_mapped_drug_disease)
+    df = data_sources["final_df"]
 
     df.write.parquet(f"{cfg['datasets']['output_path']}/{date}", mode="overwrite")
     spark.stop()
