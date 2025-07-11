@@ -1,12 +1,7 @@
 """Utils to transform AACT database to drug/indication relationships."""
 
-from typing import TYPE_CHECKING
-
 from pyspark.sql import DataFrame
 import pyspark.sql.functions as f
-
-if TYPE_CHECKING:
-    from pyspark.sql import DataFrame
 
 
 def process_interventions(
@@ -43,7 +38,8 @@ def process_conditions(
     conditions: DataFrame, browse_conditions: DataFrame
 ) -> DataFrame:
     browse_conditions = (
-        browse_conditions.join(conditions.select("nct_id"), "nct_id", "left").filter(f.col("mesh_type") == "mesh-list")
+        browse_conditions.join(conditions.select("nct_id"), "nct_id", "left")
+        .filter(f.col("mesh_type") == "mesh-list")
         .selectExpr("nct_id", "downcase_mesh_term as mesh_term")
         .distinct()
     )

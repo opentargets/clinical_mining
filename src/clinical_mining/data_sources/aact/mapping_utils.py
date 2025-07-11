@@ -68,3 +68,5 @@ def process_disease(spark_session: SparkSession, path: str) -> DataFrame:
         .distinct()
         .persist()
     )
+
+

@@ -11,71 +11,84 @@ datasets:
   output_path: "/Users/irenelopez/EBI/repos/clinical_mining/data/outputs/clinical_trials" #???
 
 inputs:
-  - name: studies
+  studies:
     type: db_table
-    role: main_df
-    select_cols:
-      - nct_id
-      - overall_status
-      - phase
-      - study_type
-      - completion_date
-      - why_stopped
-      - number_of_arms
-
-  - name: interventions
+    select_cols: [nct_id, overall_status, phase, study_type, completion_date, why_stopped, number_of_arms]
+  interventions:
     type: db_table
-    select_cols:
-      - nct_id
-      - intervention_type
-      - name
-
-  - name: browse_interventions
+    select_cols: [nct_id, intervention_type, name]
+  browse_interventions:
     type: db_table
-    select_cols:
-      - id
-      - nct_id
-      - mesh_term
-      - downcase_mesh_term
-      - mesh_type
-
-  - name: conditions
+    select_cols: [id, nct_id, mesh_term, downcase_mesh_term, mesh_type]
+  conditions:
     type: db_table
-    select_cols:
-      - nct_id
-      - downcase_name
-
-  - name: browse_conditions
+    select_cols: [nct_id, downcase_name]
+  browse_conditions:
     type: db_table
-    select_cols:
-      - nct_id
-      - downcase_mesh_term
-      - mesh_type
-
-  - name: study_references
+    select_cols: [nct_id, downcase_mesh_term, mesh_type]
+  study_references:
     type: db_table
-    role: metadata
-    select_cols:
-      - nct_id
-      - pmid
-      - reference_type
-
-  - name: designs
+    select_cols: [nct_id, pmid, reference_type]
+  designs:
     type: db_table
-    role: metadata
-    select_cols:
-      - nct_id
-      - primary_purpose
-
-  - name: brief_summaries
+    select_cols: [nct_id, primary_purpose]
+  brief_summaries:
     type: db_table
-    role: metadata
-    select_cols:
-      - nct_id
-      - description
-
-  - name: chembl_indications_raw
+    select_cols: [nct_id, description]
+  chembl_indications_raw:
     type: file
     format: json
     path: ${datasets.chembl_indications_path}
-  
+
+pipeline:
+  setup:
+    - name: molecule
+      function: clinical_mining.data_sources.aact.mapping_utils.process_molecule
+      parameters:
+        path: ${datasets.molecule_path}
+
+    - name: disease
+      function: clinical_mining.data_sources.aact.mapping_utils.process_disease
+      parameters:
+        path: ${datasets.disease_path}
+
+    - name: trials
+      function: clinical_mining.data_sources.aact.aact.extract_clinical_trials
+      parameters:
+        studies: $studies
+        additional_metadata: ['$study_references', '$designs', '$brief_summaries']
+
+  union:
+    - name: aact_indications
+      function: clinical_mining.data_sources.aact.aact.extract_drug_indications
+      parameters:
+        studies: $trials
+        interventions: $interventions
+        conditions: $conditions
+        browse_conditions: $browse_conditions
+        browse_interventions: $browse_interventions
+
+    - name: chembl_indications
+      function: clinical_mining.data_sources.chembl.indications.extract_chembl_indications
+      parameters:
+        raw_indications: $chembl_indications_raw
+
+  process:
+    - name: trials_mapped_drug
+      function: clinical_mining.data_sources.aact.mapping_utils.assign_drug_id
+      parameters:
+        df: $indications
+        molecule: $molecule
+        verbose: false
+
+    - name: trials_mapped_drug_disease
+      function: clinical_mining.data_sources.aact.mapping_utils.assign_disease_id
+      parameters:
+        df: $trials_mapped_drug
+        diseases: $disease
+        verbose: false
+
+    - name: final_df
+      function: clinical_mining.utils.utils.assign_approval_status
+      parameters:
+        indications: $trials_mapped_drug_disease

@@ -1,25 +1,20 @@
 """Extraction of drug/indication relationships from ChEMBL Indications dataset."""
 
-from typing import TYPE_CHECKING
-
 from pyspark.sql import DataFrame
 import pyspark.sql.functions as f
 
-if TYPE_CHECKING:
-    from pyspark.sql import DataFrame
 
-
-def extract_chembl_indications(df: DataFrame) -> DataFrame:
+def extract_chembl_indications(raw_indications: DataFrame) -> DataFrame:
     """
     Extract drug/indication relationships from ChEMBL Indications dataset.
 
     Args:
-        df: ChEMBL Indications dataset in JSON form
+        raw_indications: ChEMBL Indications dataset in JSON form
     Returns:
         DataFrame with drug/indication relationships
     """
     return (
-        df.select(
+        raw_indications.select(
             f.explode("_metadata.all_molecule_chembl_ids").alias("drug_id"),
             f.translate("efo_id", ":", "_").alias("disease_id"),
             "indication_refs",
