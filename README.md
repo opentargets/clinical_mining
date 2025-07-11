@@ -42,13 +42,13 @@ This project provides tools to fetch, process, and annotate clinical trial data 
 Execute the main script from the root directory of the project:
 
 ```bash
-uv run python src/clinical_mining/main.py
+uv run clinical_mining
 ```
 
 You can override configuration parameters from the command line if needed:
 
 ```bash
-uv run python src/clinical_mining/main.py db_properties.user=<your_user> db_properties.password=<your_password>
+uv run clinical_mining db_properties.user=<your_user> db_properties.password=<your_password>
 ```
 
 ## Pipeline Configuration

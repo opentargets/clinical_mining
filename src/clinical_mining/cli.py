@@ -1,6 +1,7 @@
 from datetime import datetime
 from functools import reduce
 from pathlib import Path
+
 import hydra
 from omegaconf import DictConfig
 from pyspark.sql import DataFrame
@@ -12,9 +13,7 @@ from clinical_mining.utils.spark import SparkSession
 @hydra.main(
     version_base="1.3", config_path=str(Path(__file__).parent), config_name="config"
 )
-def main(
-    cfg: DictConfig,
-) -> DataFrame:
+def main(cfg: DictConfig) -> DataFrame:
     """Main function to run the clinical mining pipeline."""
     spark = SparkSession(
         db_url=cfg.db_properties.url,
@@ -64,5 +63,4 @@ def main(
 
 
 if __name__ == "__main__":
-    date = datetime.now().strftime("%Y%m%d")
     main()

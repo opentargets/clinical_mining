@@ -10,6 +10,9 @@ dependencies = [
     "pyspark>=3.5.5",
 ]
 
+[project.scripts]
+clinical_mining = "clinical_mining.cli:main"
+
 [project.optional-dependencies]
 dev = []
 
