@@ -1,63 +1,101 @@
+# =================================================
+# PIPELINE CONFIGURATION
+# =================================================
+
+# Database Connection Properties
 db_properties:
   url: "aact-db.ctti-clinicaltrials.org:5432/aact"
   schema: ctgov
-  user: ???
+  user: ???       
   password: ???
 
+# Path Definitions for Local Datasets
 datasets:
-  chembl_indications_path: /Users/irenelopez/EBI/repos/clinical_mining/data/inputs/chembl_drug_indication.jsonl #???
-  disease_path: /Users/irenelopez/EBI/repos/clinical_mining/data/inputs/disease #???
-  molecule_path: /Users/irenelopez/EBI/repos/clinical_mining/data/inputs/drug_molecule #???
-  output_path: "/Users/irenelopez/EBI/repos/clinical_mining/data/outputs/clinical_trials" #???
+  chembl_indications_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/inputs/chembl_drug_indication.jsonl # ???
+  disease_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/inputs/disease # ???
+  molecule_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/inputs/drug_molecule # ???
+  output_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/outputs/clinical_trials # ???
 
+# Input Data Sources - Each key becomes the name of a DataFrame available to the pipeline steps.
 inputs:
   studies:
     type: db_table
-    select_cols: [nct_id, overall_status, phase, study_type, completion_date, why_stopped, number_of_arms]
+    select_cols:
+      - nct_id
+      - overall_status
+      - phase
+      - study_type
+      - completion_date
+      - why_stopped
+      - number_of_arms
   interventions:
     type: db_table
-    select_cols: [nct_id, intervention_type, name]
+    select_cols:
+      - nct_id
+      - intervention_type
+      - name
   browse_interventions:
     type: db_table
-    select_cols: [id, nct_id, mesh_term, downcase_mesh_term, mesh_type]
+    select_cols:
+      - id
+      - nct_id
+      - mesh_term
+      - downcase_mesh_term
+      - mesh_type
   conditions:
     type: db_table
-    select_cols: [nct_id, downcase_name]
+    select_cols:
+      - nct_id
+      - downcase_name
   browse_conditions:
     type: db_table
-    select_cols: [nct_id, downcase_mesh_term, mesh_type]
+    select_cols:
+      - nct_id
+      - downcase_mesh_term
+      - mesh_type
   study_references:
     type: db_table
-    select_cols: [nct_id, pmid, reference_type]
+    select_cols:
+      - nct_id
+      - pmid
+      - reference_type
   designs:
     type: db_table
-    select_cols: [nct_id, primary_purpose]
+    select_cols:
+      - nct_id
+      - primary_purpose
   brief_summaries:
     type: db_table
-    select_cols: [nct_id, description]
+    select_cols:
+      - nct_id
+      - description
   chembl_indications_raw:
     type: file
     format: json
     path: ${datasets.chembl_indications_path}
 
+# =============================
+# PIPELINE DEFINITION
+# =============================
+
 pipeline:
+  # SETUP: Steps to prepare data needed by later stages (e.g., loading mapping tables).
   setup:
     - name: molecule
       function: clinical_mining.data_sources.aact.mapping_utils.process_molecule
       parameters:
         path: ${datasets.molecule_path}
-
     - name: disease
       function: clinical_mining.data_sources.aact.mapping_utils.process_disease
       parameters:
         path: ${datasets.disease_path}
-
     - name: trials
       function: clinical_mining.data_sources.aact.aact.extract_clinical_trials
       parameters:
         studies: $studies
         additional_metadata: ['$study_references', '$designs', '$brief_summaries']
 
+  # UNION: Steps that generate the core drug/indication DataFrames. These outputs are combined into a single `indications` DataFrame.
   union:
     - name: aact_indications
       function: clinical_mining.data_sources.aact.aact.extract_drug_indications
@@ -67,12 +105,12 @@ pipeline:
         conditions: $conditions
         browse_conditions: $browse_conditions
         browse_interventions: $browse_interventions
-
     - name: chembl_indications
       function: clinical_mining.data_sources.chembl.indications.extract_chembl_indications
       parameters:
         raw_indications: $chembl_indications_raw
 
+  # PROCESS: Final transformation steps that run sequentially on the unified `indications` DataFrame.
   process:
     - name: trials_mapped_drug
       function: clinical_mining.data_sources.aact.mapping_utils.assign_drug_id
@@ -80,14 +118,12 @@ pipeline:
         df: $indications
         molecule: $molecule
         verbose: false
-
     - name: trials_mapped_drug_disease
       function: clinical_mining.data_sources.aact.mapping_utils.assign_disease_id
       parameters:
         df: $trials_mapped_drug
         diseases: $disease
         verbose: false
-
     - name: final_df
       function: clinical_mining.utils.utils.assign_approval_status
       parameters:
