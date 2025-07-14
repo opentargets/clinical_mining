@@ -82,11 +82,11 @@ pipeline:
   # SETUP: Steps to prepare data needed by later stages (e.g., loading mapping tables).
   setup:
     - name: molecule
-      function: clinical_mining.data_sources.aact.mapping_utils.process_molecule
+      function: clinical_mining.utils.mapping.process_molecule
       parameters:
         path: ${datasets.molecule_path}
     - name: disease
-      function: clinical_mining.data_sources.aact.mapping_utils.process_disease
+      function: clinical_mining.utils.mapping.process_disease
       parameters:
         path: ${datasets.disease_path}
     - name: trials
@@ -100,7 +100,7 @@ pipeline:
     - name: aact_indications
       function: clinical_mining.data_sources.aact.aact.extract_drug_indications
       parameters:
-        studies: $trials
+        studies: $trials  # TODO: Delete?
         interventions: $interventions
         conditions: $conditions
         browse_conditions: $browse_conditions
@@ -113,13 +113,13 @@ pipeline:
   # PROCESS: Final transformation steps that run sequentially on the unified `indications` DataFrame.
   process:
     - name: trials_mapped_drug
-      function: clinical_mining.data_sources.aact.mapping_utils.assign_drug_id
+      function: clinical_mining.utils.mapping.assign_drug_id
       parameters:
         df: $indications
         molecule: $molecule
         verbose: false
     - name: trials_mapped_drug_disease
-      function: clinical_mining.data_sources.aact.mapping_utils.assign_disease_id
+      function: clinical_mining.utils.mapping.assign_disease_id
       parameters:
         df: $trials_mapped_drug
         diseases: $disease
