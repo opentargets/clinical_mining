@@ -74,29 +74,33 @@ def extract_clinical_trials(
 
 
 def extract_drug_indications(
-    studies: DataFrame,
     interventions: DataFrame,
     conditions: DataFrame,
     browse_conditions: DataFrame,
     browse_interventions: DataFrame,
 ) -> DataFrame:
+    """Extract drug/indication relationships from AACT database.
+    
+    Args:
+        interventions (DataFrame): Interventions table with interventions or exposures of interest to the study, or associated with study arms/groups.
+        conditions (DataFrame): Conditions table with name(s) of the condition(s) studied in the clinical study, or the focus of the clinical study.
+        browse_conditions (DataFrame): Browse_conditions table with MeSH terms that describe the condition(s) being addressed by the clinical trial.
+        browse_interventions (DataFrame): Browse_interventions table with MeSH terms that describe the intervention(s) of interest to the study, or associated with study arms/groups.
+    Returns:
+        DataFrame: The processed drug/indication relationships
+    """
     processed_interventions = process_interventions(interventions, browse_interventions)
     processed_conditions = process_conditions(conditions, browse_conditions)
     return (
-        studies.join(
-            processed_interventions,
-            on="nct_id",
-            how="inner",
+            processed_interventions.join(
+                processed_conditions,
+                on="nct_id",
+                how="inner",
+            )
+            .withColumn("source", f.lit("AACT"))
+            .withColumn(
+                "url",
+                f.concat(f.lit("https://clinicaltrials.gov/search?term="), f.col("nct_id")),
+            )
+            .distinct()
         )
-        .join(
-            processed_conditions,
-            on="nct_id",
-            how="inner",
-        )
-        .withColumn("source", f.lit("AACT"))
-        .withColumn(
-            "url",
-            f.concat(f.lit("https://clinicaltrials.gov/search?term="), f.col("nct_id")),
-        )
-        .distinct()
-    )

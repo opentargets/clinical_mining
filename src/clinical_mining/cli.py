@@ -1,5 +1,4 @@
 from datetime import datetime
-from functools import reduce
 from pathlib import Path
 
 import hydra
@@ -42,21 +41,19 @@ def main(cfg: DictConfig) -> DataFrame:
         print(f"Setup step: {step.name}")
         execute_step(step, data_store, spark)
 
-    # Union - Combine Drug/Indication DataFrames
-    union_dfs = [execute_step(step, data_store, spark) for step in cfg.pipeline.union]
-    indications = reduce(
-        lambda df1, df2: df1.unionByName(df2, allowMissingColumns=True), union_dfs
-    )
-    data_store["indications"] = indications
+    # Generate Drug/Indication DataFrames
+    for step in cfg.pipeline.generate:
+        print(f"Data Generation step: {step.name}")
+        execute_step(step, data_store, spark)
 
-    # Process - Generate final DataFrame
-    for step in cfg.pipeline.process:
-        print(f"Processing step: {step.name}")
+    # Post-Process - Generate final DataFrame
+    for step in cfg.pipeline.post_process:
+        print(f"Post-Processing step: {step.name}")
         execute_step(step, data_store, spark)
 
     # Write the final output
     date = datetime.now().strftime("%Y-%m-%d")
-    final_df = data_store["final_df"]
+    final_df = data_store["final_df"].distinct()
     final_df.write.parquet(f"{cfg.datasets.output_path}/{date}", mode="overwrite")
     spark.stop()
     return final_df

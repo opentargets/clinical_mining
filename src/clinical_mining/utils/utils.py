@@ -3,6 +3,7 @@
 from pyspark.sql import DataFrame
 import pyspark.sql.functions as f
 
+
 def assign_approval_status(
     indications: DataFrame,
 ) -> DataFrame:

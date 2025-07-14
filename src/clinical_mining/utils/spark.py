@@ -1,6 +1,8 @@
 from psutil import virtual_memory
 from pyspark.sql import DataFrame, SparkSession as PySparkSession
 
+from functools import reduce
+
 
 def detect_spark_memory_limit() -> int:
     """Detects available memory (in GiB) and reserves 90% for Spark."""
@@ -90,3 +92,33 @@ class SparkSession:
         """Get schema for a table"""
         limited_df = self.load_table(table_name, limit=1)
         limited_df.printSchema()
+
+
+def join_dfs(
+    dfs: list[DataFrame],
+    join_on: str = "nct_id",
+    how: str = "left",
+) -> DataFrame:
+    """Join a list of DataFrames on a common column.
+
+    Args:
+        dfs: List of DataFrames to join
+        join_on: Column to join on
+        how: Type of join to use
+    Returns:
+        DataFrame: The joined DataFrame
+    """
+    return reduce(lambda df1, df2: df1.join(df2, on=join_on, how=how), dfs)
+
+
+def union_dfs(
+    dfs: list[DataFrame],
+) -> DataFrame:
+    """Union a list of DataFrames.
+
+    Args:
+        dfs: List of DataFrames to union
+    Returns:
+        DataFrame: The unioned DataFrame
+    """
+    return reduce(lambda df1, df2: df1.unionByName(df2, allowMissingColumns=True), dfs)

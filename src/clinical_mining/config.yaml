@@ -95,12 +95,11 @@ pipeline:
         studies: $studies
         additional_metadata: ['$study_references', '$designs', '$brief_summaries']
 
-  # UNION: Steps that generate the core drug/indication DataFrames. These outputs are combined into a single `indications` DataFrame.
-  union:
+  # GENERATE: Steps that generate the core drug/indication DataFrames.
+  generate:
     - name: aact_indications
       function: clinical_mining.data_sources.aact.aact.extract_drug_indications
       parameters:
-        studies: $trials  # TODO: Delete?
         interventions: $interventions
         conditions: $conditions
         browse_conditions: $browse_conditions
@@ -110,12 +109,22 @@ pipeline:
       parameters:
         raw_indications: $chembl_indications_raw
 
-  # PROCESS: Final transformation steps that run sequentially on the unified `indications` DataFrame.
-  process:
+  # POST-PROCESS: Final transformation steps that run sequentially on the unified `indications` DataFrame.
+  post_process:
+    - name: indications
+      function: clinical_mining.utils.spark.union_dfs
+      parameters:
+        dfs: [$aact_indications, $chembl_indications]
+    - name: indications_w_metadata
+      function: clinical_mining.utils.spark.join_dfs
+      parameters:
+        dfs: [$indications, $trials]
+        join_on: nct_id
+        how: inner
     - name: trials_mapped_drug
       function: clinical_mining.utils.mapping.assign_drug_id
       parameters:
-        df: $indications
+        df: $indications_w_metadata
         molecule: $molecule
         verbose: false
     - name: trials_mapped_drug_disease
