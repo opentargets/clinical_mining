@@ -108,6 +108,7 @@ pipeline:
       function: clinical_mining.data_sources.chembl.indications.extract_chembl_indications
       parameters:
         raw_indications: $chembl_indications_raw
+        exclude_trials: true
 
   # POST-PROCESS: Final transformation steps that run sequentially on the unified `indications` DataFrame.
   post_process:
@@ -120,7 +121,7 @@ pipeline:
       parameters:
         dfs: [$indications, $trials]
         join_on: nct_id
-        how: inner
+        how: left
     - name: trials_mapped_drug
       function: clinical_mining.utils.mapping.assign_drug_id
       parameters:

@@ -4,7 +4,9 @@ from pyspark.sql import DataFrame
 import pyspark.sql.functions as f
 
 
-def extract_chembl_indications(raw_indications: DataFrame) -> DataFrame:
+def extract_chembl_indications(
+    raw_indications: DataFrame, exclude_trials: bool = False
+) -> DataFrame:
     """
     Extract drug/indication relationships from ChEMBL Indications dataset.
 
@@ -13,7 +15,8 @@ def extract_chembl_indications(raw_indications: DataFrame) -> DataFrame:
     Returns:
         DataFrame with drug/indication relationships
     """
-    return (
+
+    indications = (
         raw_indications.select(
             f.explode("_metadata.all_molecule_chembl_ids").alias("drug_id"),
             f.translate("efo_id", ":", "_").alias("disease_id"),
@@ -42,3 +45,6 @@ def extract_chembl_indications(raw_indications: DataFrame) -> DataFrame:
         .drop("indication_refs", "indication_ref")
         .distinct()
     )
+    if exclude_trials:
+        return indications.filter(f.col("source") != "ClinicalTrials")
+    return indications
