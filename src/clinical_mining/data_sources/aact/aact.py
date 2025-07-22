@@ -3,6 +3,8 @@
 from pyspark.sql import DataFrame
 import pyspark.sql.functions as f
 
+from clinical_mining.dataset import ClinicalTrialDataset, DrugIndicationDataset
+
 
 def process_interventions(
     interventions: DataFrame, browse_interventions: DataFrame
@@ -29,6 +31,7 @@ def process_interventions(
     return (
         interventions.join(browse_interventions, "nct_id", "left")
         .withColumn("drug_name", f.coalesce(f.col("mesh_term"), f.col("name")))
+        .withColumnRenamed("nct_id", "studyId")
         .drop("name", "mesh_term")
         .distinct()
     )
@@ -36,7 +39,7 @@ def process_interventions(
 
 def process_conditions(
     conditions: DataFrame, browse_conditions: DataFrame
-) -> DataFrame:
+) -> DrugIndicationDataset:
     browse_conditions = (
         browse_conditions.join(conditions.select("nct_id"), "nct_id", "left")
         .filter(f.col("mesh_type") == "mesh-list")
@@ -44,8 +47,12 @@ def process_conditions(
         .distinct()
     )
     return (
-        conditions.selectExpr("nct_id", "downcase_name")
-        .join(browse_conditions.selectExpr("nct_id", "mesh_term"), "nct_id", "left")
+        conditions.selectExpr("nct_id as studyId", "downcase_name")
+        .join(
+            browse_conditions.selectExpr("nct_id as studyId", "mesh_term"),
+            "studyId",
+            "left",
+        )
         .withColumn(
             "disease_name", f.coalesce(f.col("mesh_term"), f.col("downcase_name"))
         )
@@ -56,21 +63,21 @@ def process_conditions(
 
 def extract_clinical_trials(
     studies: DataFrame, additional_metadata: list[DataFrame] | None = None
-) -> DataFrame:
+) -> ClinicalTrialDataset:
     """Return clinical trials with desired extra annotations from other tables.
 
     Args:
         studies (DataFrame): The studies to process
         additional_metadata (list[DataFrame] | None): Optional list of DataFrames to join on and add additional trial metadata
     Returns:
-        DataFrame: The processed studies
+        ClinicalTrialDataset: The processed studies
     """
     STUDY_TYPES = ["INTERVENTIONAL", "OBSERVATIONAL", "EXPANDED_ACCESS"]
     studies = studies.filter(f.col("study_type").isin(STUDY_TYPES))
     if additional_metadata is not None:
         for metadata_df in additional_metadata:
             studies = studies.join(metadata_df, on="nct_id", how="left")
-    return studies
+    return ClinicalTrialDataset(df=studies.withColumnRenamed("nct_id", "studyId"))
 
 
 def extract_drug_indications(
@@ -80,7 +87,7 @@ def extract_drug_indications(
     browse_interventions: DataFrame,
 ) -> DataFrame:
     """Extract drug/indication relationships from AACT database.
-    
+
     Args:
         interventions (DataFrame): Interventions table with interventions or exposures of interest to the study, or associated with study arms/groups.
         conditions (DataFrame): Conditions table with name(s) of the condition(s) studied in the clinical study, or the focus of the clinical study.
@@ -91,16 +98,22 @@ def extract_drug_indications(
     """
     processed_interventions = process_interventions(interventions, browse_interventions)
     processed_conditions = process_conditions(conditions, browse_conditions)
-    return (
+    return DrugIndicationDataset(
+        df=(
             processed_interventions.join(
                 processed_conditions,
-                on="nct_id",
+                on="studyId",
                 how="inner",
             )
             .withColumn("source", f.lit("AACT"))
             .withColumn(
                 "url",
-                f.concat(f.lit("https://clinicaltrials.gov/search?term="), f.col("nct_id")),
+                f.concat(
+                    f.lit("https://clinicaltrials.gov/search?term="),
+                    f.col("studyId"),
+                ),
             )
+            .drop("nct_id")
             .distinct()
         )
+    )

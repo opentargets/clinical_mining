@@ -120,7 +120,7 @@ pipeline:
       function: clinical_mining.utils.spark.join_dfs
       parameters:
         dfs: [$indications, $trials]
-        join_on: nct_id
+        join_on: studyId
         how: left
     - name: trials_mapped_drug
       function: clinical_mining.utils.mapping.assign_drug_id
@@ -135,6 +135,6 @@ pipeline:
         diseases: $disease
         verbose: false
     - name: final_df
-      function: clinical_mining.utils.utils.assign_approval_status
+      function: clinical_mining.dataset.drug_indication.DrugIndicationDataset.assign_approval_status
       parameters:
         indications: $trials_mapped_drug_disease

@@ -3,6 +3,8 @@
 from pyspark.sql import DataFrame
 import pyspark.sql.functions as f
 
+from clinical_mining.dataset import DrugIndicationDataset
+
 
 def extract_chembl_indications(
     raw_indications: DataFrame, exclude_trials: bool = False
@@ -24,22 +26,13 @@ def extract_chembl_indications(
         )
         .withColumn("indication_ref", f.explode("indication_refs"))
         # A drug/disease pair can be supported by multiple trials in a single record (e.g. CHEMBL108/EFO_0004263)
-        .withColumn("id", f.explode(f.split(f.col("indication_ref.ref_id"), ",")))
-        .withColumn(
-            "nct_id",
-            f.when(
-                f.col("indication_ref.ref_type") == "ClinicalTrials",
-                f.col("id"),
-            ),
-        )
+        .withColumn("studyId", f.explode(f.split(f.col("indication_ref.ref_id"), ",")))
         .withColumn("source", f.col("indication_ref.ref_type"))
         .withColumn(
             "url",
             f.when(
                 f.col("source") == "ClinicalTrials",
-                f.concat(
-                    f.lit("https://clinicaltrials.gov/search?term="), f.col("nct_id")
-                ),
+                f.concat(f.lit("https://clinicaltrials.gov/search?term="), f.col("studyId")),
             ).otherwise(f.col("indication_ref.ref_url")),
         )
         .drop("indication_refs", "indication_ref")
@@ -47,4 +40,4 @@ def extract_chembl_indications(
     )
     if exclude_trials:
         return indications.filter(f.col("source") != "ClinicalTrials")
-    return indications
+    return DrugIndicationDataset(df=indications)

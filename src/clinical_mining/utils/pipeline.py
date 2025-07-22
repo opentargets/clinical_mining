@@ -4,24 +4,41 @@ import importlib
 import inspect
 
 from omegaconf import ListConfig
+from pyspark.sql import DataFrame
 
 from clinical_mining.utils.spark import SparkSession
 
 
 def _get_callable(function_path: str):
-    """Imports a function from a string path. E.g. clinical_mining.data_sources.aact.aact.extract_clinical_trials.
+    """Imports a function or static method from a string path.
+    
+    Supports both module-level functions and static/class methods within classes.
+    Examples:
+        - Module function: 'clinical_mining.data_sources.aact.aact.extract_clinical_trials'
+        - Static method: 'clinical_mining.dataset.drug_indication.DrugIndicationDataset.assign_approval_status'
 
     Args:
         function_path (str): The path to the function to import.
     Returns:
         function: The imported function.
     Raises:
-        ImportError: If the function cannot be imported.
+        ImportError: If the function or static method cannot be imported.
     """
     try:
-        module_path, function_name = function_path.rsplit(".", 1)
-        module = importlib.import_module(module_path)
-        return getattr(module, function_name)
+        # Try to import as a module-level function first
+        try:
+            module_path, function_name = function_path.rsplit(".", 1)
+            module = importlib.import_module(module_path)
+            return getattr(module, function_name)
+        except (ImportError, AttributeError):
+            # If that fails, try to import as a class method
+            parts = function_path.rsplit(".", 2)
+            if len(parts) == 3:
+                module_path, class_name, method_name = parts
+                module = importlib.import_module(module_path)
+                cls = getattr(module, class_name)
+                return getattr(cls, method_name)
+            raise
     except (ImportError, AttributeError) as e:
         raise ImportError(f"Could not import function '{function_path}': {e}")
 
@@ -69,5 +86,7 @@ def execute_step(
         params["spark_session"] = spark
 
     result = func(**params)
+    if not isinstance(result, DataFrame) and hasattr(result, "df"):
+        result = result.df
     data_store[step.name] = result
     return result
