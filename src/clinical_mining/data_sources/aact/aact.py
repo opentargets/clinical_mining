@@ -3,7 +3,7 @@
 from pyspark.sql import DataFrame
 import pyspark.sql.functions as f
 
-from clinical_mining.dataset import ClinicalTrialDataset, DrugIndicationDataset
+from clinical_mining.dataset import ClinicalStudyDataset, DrugIndicationEvidenceDataset
 
 
 def process_interventions(
@@ -39,7 +39,7 @@ def process_interventions(
 
 def process_conditions(
     conditions: DataFrame, browse_conditions: DataFrame
-) -> DrugIndicationDataset:
+) -> DataFrame:
     browse_conditions = (
         browse_conditions.join(conditions.select("nct_id"), "nct_id", "left")
         .filter(f.col("mesh_type") == "mesh-list")
@@ -63,21 +63,21 @@ def process_conditions(
 
 def extract_clinical_trials(
     studies: DataFrame, additional_metadata: list[DataFrame] | None = None
-) -> ClinicalTrialDataset:
+) -> ClinicalStudyDataset:
     """Return clinical trials with desired extra annotations from other tables.
 
     Args:
         studies (DataFrame): The studies to process
         additional_metadata (list[DataFrame] | None): Optional list of DataFrames to join on and add additional trial metadata
     Returns:
-        ClinicalTrialDataset: The processed studies
+        ClinicalStudyDataset: The processed studies
     """
     STUDY_TYPES = ["INTERVENTIONAL", "OBSERVATIONAL", "EXPANDED_ACCESS"]
     studies = studies.filter(f.col("study_type").isin(STUDY_TYPES))
     if additional_metadata is not None:
         for metadata_df in additional_metadata:
             studies = studies.join(metadata_df, on="nct_id", how="left")
-    return ClinicalTrialDataset(df=studies.withColumnRenamed("nct_id", "studyId"))
+    return ClinicalStudyDataset(df=studies.withColumnRenamed("nct_id", "studyId"))
 
 
 def extract_drug_indications(
@@ -85,7 +85,7 @@ def extract_drug_indications(
     conditions: DataFrame,
     browse_conditions: DataFrame,
     browse_interventions: DataFrame,
-) -> DataFrame:
+) -> DrugIndicationEvidenceDataset:
     """Extract drug/indication relationships from AACT database.
 
     Args:
@@ -94,11 +94,11 @@ def extract_drug_indications(
         browse_conditions (DataFrame): Browse_conditions table with MeSH terms that describe the condition(s) being addressed by the clinical trial.
         browse_interventions (DataFrame): Browse_interventions table with MeSH terms that describe the intervention(s) of interest to the study, or associated with study arms/groups.
     Returns:
-        DataFrame: The processed drug/indication relationships
+        DrugIndicationEvidenceDataset: The processed drug/indication relationships
     """
     processed_interventions = process_interventions(interventions, browse_interventions)
     processed_conditions = process_conditions(conditions, browse_conditions)
-    return DrugIndicationDataset(
+    return DrugIndicationEvidenceDataset(
         df=(
             processed_interventions.join(
                 processed_conditions,

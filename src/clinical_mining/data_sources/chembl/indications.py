@@ -3,19 +3,19 @@
 from pyspark.sql import DataFrame
 import pyspark.sql.functions as f
 
-from clinical_mining.dataset import DrugIndicationDataset
+from clinical_mining.dataset import DrugIndicationEvidenceDataset
 
 
 def extract_chembl_indications(
     raw_indications: DataFrame, exclude_trials: bool = False
-) -> DataFrame:
+) -> DrugIndicationEvidenceDataset:
     """
     Extract drug/indication relationships from ChEMBL Indications dataset.
 
     Args:
         raw_indications: ChEMBL Indications dataset in JSON form
     Returns:
-        DataFrame with drug/indication relationships
+        DrugIndicationEvidenceDataset: Dataset with drug/indication relationships
     """
 
     indications = (
@@ -40,4 +40,4 @@ def extract_chembl_indications(
     )
     if exclude_trials:
         return indications.filter(f.col("source") != "ClinicalTrials")
-    return DrugIndicationDataset(df=indications)
+    return DrugIndicationEvidenceDataset(df=indications)
