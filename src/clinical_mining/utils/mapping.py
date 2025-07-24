@@ -1,72 +1,85 @@
-from pyspark.sql import DataFrame
-import pyspark.sql.functions as f
-
-from clinical_mining.utils.spark import SparkSession
+import polars as pl
 
 
-def assign_drug_id(df, molecule, verbose: bool = True):
+def assign_drug_id(
+    df: pl.DataFrame, molecule: pl.DataFrame, verbose: bool = True
+) -> pl.DataFrame:
+    """Assigns drug IDs by joining with a molecule mapping table."""
     df_w_id = (
-        df.withColumn("drug_name", f.lower("drug_name"))
+        df.with_columns(pl.col("drug_name").str.to_lowercase())
         .join(
-            molecule.withColumn("drug_name", f.explode("drug_names")),
-            "drug_name",
-            "left",
+            molecule.explode("drug_names").rename({"drug_names": "drug_name"}),
+            on="drug_name",
+            how="left",
         )
-        .withColumn("drug_id", f.coalesce(f.col("drug_id"), f.col("mapped_drug_id")))
-        .drop("drug_names", "mapped_drug_id")
+        .with_columns(drug_id=pl.coalesce(["drug_id", "mapped_drug_id"]))
+        .drop("mapped_drug_id")
     )
     if verbose:
-        print(f"Unmapped rows: {df_w_id.filter(f.col('drug_id').isNull()).count()}")
-        print(f"Mapped rows: {df_w_id.filter(f.col('drug_id').isNotNull()).count()}")
+        unmapped_count = df_w_id.filter(pl.col("drug_id").is_null()).height
+        mapped_count = df_w_id.filter(pl.col("drug_id").is_not_null()).height
+        print(f"Unmapped drug rows: {unmapped_count}")
+        print(f"Mapped drug rows: {mapped_count}")
     return df_w_id
 
 
-def assign_disease_id(df, diseases, verbose: bool = True):
+def assign_disease_id(
+    df: pl.DataFrame, diseases: pl.DataFrame, verbose: bool = True
+) -> pl.DataFrame:
+    """Assigns disease IDs by joining with a disease mapping table."""
     df_w_id = (
-        df.withColumn("disease_name", f.lower("disease_name"))
+        df.with_columns(pl.col("disease_name").str.to_lowercase())
         .join(
-            diseases.withColumn("disease_name", f.explode("disease_names")),
-            "disease_name",
-            "left",
+            diseases.explode("disease_names").rename({"disease_names": "disease_name"}),
+            on="disease_name",
+            how="left",
         )
-        .withColumn(
-            "disease_id", f.coalesce(f.col("disease_id"), f.col("mapped_disease_id"))
-        )
-        .drop("disease_names", "mapped_disease_id")
+        .with_columns(disease_id=pl.coalesce(["disease_id", "mapped_disease_id"]))
+        .drop("mapped_disease_id")
     )
     if verbose:
-        print(f"Unmapped rows: {df_w_id.filter(f.col('disease_id').isNull()).count()}")
-        print(f"Mapped rows: {df_w_id.filter(f.col('disease_id').isNotNull()).count()}")
+        unmapped_count = df_w_id.filter(pl.col("disease_id").is_null()).height
+        mapped_count = df_w_id.filter(pl.col("disease_id").is_not_null()).height
+        print(f"Unmapped disease rows: {unmapped_count}")
+        print(f"Mapped disease rows: {mapped_count}")
     return df_w_id
 
 
-def process_molecule(spark_session: SparkSession, path: str) -> DataFrame:
+def process_molecule(path: str) -> pl.DataFrame:
+    """Loads and processes molecule data from a Parquet file."""
     return (
-        spark_session.session.read.parquet(path)
-        .select("id", f.lower("name").alias("name"), "synonyms")
-        .withColumn("synonyms", f.transform(f.col("synonyms"), lambda x: f.lower(x)))
-        .withColumn(
-            "drug_names", f.array_union(f.array(f.col("name")), f.col("synonyms"))
+        pl.read_parquet(path)
+        .select(
+            pl.col("id").alias("mapped_drug_id"),
+            pl.col("name").str.to_lowercase(),
+            pl.col("synonyms").list.eval(pl.element().str.to_lowercase()),
         )
-        .selectExpr("id as mapped_drug_id", "drug_names")
-        .persist()
+        .with_columns(
+            drug_names=pl.concat_list(
+                [pl.col("synonyms"), pl.col("name")]
+            ).list.unique()
+        )
+        .select("mapped_drug_id", "drug_names")
     )
 
 
-def process_disease(spark_session: SparkSession, path: str) -> DataFrame:
+def process_disease(path: str) -> pl.DataFrame:
+    """Loads and processes disease data from a Parquet file."""
     return (
-        spark_session.session.read.parquet(path)
-        .select("id", f.lower("name").alias("name"), "synonyms")
-        .withColumn(
-            "synonyms",
-            f.transform(f.col("synonyms.hasExactSynonym"), lambda x: f.lower(x)),
+        pl.read_parquet(path)
+        .select(
+            pl.col("id").alias("mapped_disease_id"),
+            pl.col("name").str.to_lowercase(),
+            pl.col("synonyms").struct.field("hasExactSynonym").alias("synonyms"),
         )
-        .withColumn(
-            "disease_names", f.array_union(f.array(f.col("name")), f.col("synonyms"))
+        .with_columns(
+            synonyms=pl.col("synonyms").list.eval(pl.element().str.to_lowercase())
         )
-        .selectExpr("id as mapped_disease_id", "disease_names")
-        .distinct()
-        .persist()
+        .with_columns(
+            disease_names=pl.concat_list(
+                [pl.col("synonyms"), pl.col("name")]
+            ).list.unique()
+        )
+        .select("mapped_disease_id", "disease_names")
+        .unique()
     )
-
-

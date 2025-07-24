@@ -3,59 +3,54 @@ from pathlib import Path
 
 import hydra
 from omegaconf import DictConfig
-from pyspark.sql import DataFrame
-
+import polars as pl
 from clinical_mining.utils.pipeline import execute_step
-from clinical_mining.utils.spark import SparkSession
 
 
 @hydra.main(
     version_base="1.3", config_path=str(Path(__file__).parent), config_name="config"
 )
-def main(cfg: DictConfig) -> DataFrame:
+def main(cfg: DictConfig) -> pl.DataFrame:
     """Main function to run the clinical mining pipeline."""
-    spark = SparkSession(
-        db_url=cfg.db_properties.url,
-        user=cfg.db_properties.user,
-        password=cfg.db_properties.password,
-        schema=cfg.db_properties.schema,
-    )
-
     data_store = {}
 
-    ## Load all data sources
+    # Construct database URI from config
+    db_uri = f"postgresql://{cfg.db_properties.user}:{cfg.db_properties.password}@{cfg.db_properties.url}"
+
+    # Load all data sources
     for name, source in cfg.inputs.items():
         print(f"Loading input: {name}")
+        # TODO: implement load_table / print_table_schema?
         if source.type == "db_table":
-            data_store[name] = spark.load_table(
-                name, select_cols=list(source.select_cols)
-            )
+            query = f"SELECT {', '.join(source.select_cols)} FROM {cfg.db_properties.schema}.{name}"
+            if cfg.mode.debug and "nct_id" in source.select_cols:
+                study_id = cfg.mode.debug_study_id
+                query += f" WHERE nct_id = '{study_id}'"
+                print(f"  [DEBUG MODE] Filtering {name} for study: {study_id}")
+            data_store[name] = pl.read_database_uri(query=query, uri=db_uri)
         elif source.type == "file":
-            data_store[name] = spark.session.read.format(source.format).load(
-                source.path
-            )
+            if source.format == "json":
+                data_store[name] = pl.read_ndjson(source.path)
+            else:
+                raise ValueError(f"Unsupported file format: {source.format}")
 
-    ## Run pipeline sections
-    # Setup - Generate intermediate DataFrames
-    for step in cfg.pipeline.setup:
-        print(f"Setup step: {step.name}")
-        execute_step(step, data_store, spark)
-
-    # Generate Drug/Indication DataFrames
-    for step in cfg.pipeline.generate:
-        print(f"Data Generation step: {step.name}")
-        execute_step(step, data_store, spark)
-
-    # Post-Process - Generate final DataFrame
-    for step in cfg.pipeline.post_process:
-        print(f"Post-Processing step: {step.name}")
-        execute_step(step, data_store, spark)
+    # Run pipeline sections
+    for section in ["setup", "generate", "post_process"]:
+        print(f"\n----- Running {section.upper()} section -----")
+        for step in cfg.pipeline.get(section, []):
+            print(f"Executing step: {step.name}")
+            execute_step(step, data_store)
 
     # Write the final output
     date = datetime.now().strftime("%Y-%m-%d")
-    final_df = data_store["final_df"].distinct()
-    final_df.write.parquet(f"{cfg.datasets.output_path}/{date}", mode="overwrite")
-    spark.stop()
+    output_dir = Path(cfg.datasets.output_path) / date
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    final_df = data_store["final_df"].unique()
+    final_df.write_parquet(output_dir / "df.parquet")
+
+    print(f"Output written to {output_dir}")
+
     return final_df
 
 

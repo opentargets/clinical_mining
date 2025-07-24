@@ -9,6 +9,11 @@ db_properties:
   user: ???       
   password: ???
 
+# Pipeline Configuration
+mode:
+  debug: true
+  debug_study_id: "NCT00004465"
+
 # Path Definitions for Local Datasets
 datasets:
   chembl_indications_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/inputs/chembl_drug_indication.jsonl # ???
@@ -113,11 +118,11 @@ pipeline:
   # POST-PROCESS: Final transformation steps that run sequentially on the unified `indications` DataFrame.
   post_process:
     - name: indications
-      function: clinical_mining.utils.spark.union_dfs
+      function: clinical_mining.utils.polars_helpers.union_dfs
       parameters:
         dfs: [$aact_indications, $chembl_indications]
     - name: indications_w_metadata
-      function: clinical_mining.utils.spark.join_dfs
+      function: clinical_mining.utils.polars_helpers.join_dfs
       parameters:
         dfs: [$indications, $trials]
         join_on: studyId
