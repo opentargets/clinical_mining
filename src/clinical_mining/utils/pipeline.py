@@ -1,17 +1,14 @@
 """Core pipeline execution logic."""
 
 import importlib
-import inspect
 
 from omegaconf import ListConfig
-from pyspark.sql import DataFrame
-
-from clinical_mining.utils.spark import SparkSession
+import polars as pl
 
 
 def _get_callable(function_path: str):
     """Imports a function or static method from a string path.
-    
+
     Supports both module-level functions and static/class methods within classes.
     Examples:
         - Module function: 'clinical_mining.data_sources.aact.aact.extract_clinical_trials'
@@ -67,26 +64,22 @@ def _resolve_params(params: dict, data_store: dict) -> dict:
 
 
 def execute_step(
-    step: dict[str, any], data_store: dict[str, any], spark: SparkSession
+    step: dict[str, any],
+    data_store: dict[str, any],
 ) -> any:
-    """Executes a single pipeline step with automatic dependency injection for Spark and updates data_store to include the result.
+    """Executes a single pipeline step and updates data_store to include the result.
 
     Args:
         step (dict[str, any]): The step to execute.
         data_store (dict[str, any]): The data store with all dependencies
-        spark (SparkSession): The Spark session to use.
     Returns:
         any: The result of the step execution.
     """
     func = _get_callable(step.function)
     params = _resolve_params(step.get("parameters", {}), data_store)
 
-    # Inspect function signature to inject spark when needed
-    if "spark_session" in inspect.signature(func).parameters:
-        params["spark_session"] = spark
-
     result = func(**params)
-    if not isinstance(result, DataFrame) and hasattr(result, "df"):
+    if not isinstance(result, pl.DataFrame) and hasattr(result, "df"):
         result = result.df
     data_store[step.name] = result
     return result

@@ -1,13 +1,12 @@
 """Extraction of drug/indication relationships from ChEMBL Indications dataset."""
 
-from pyspark.sql import DataFrame
-import pyspark.sql.functions as f
+import polars as pl
 
 from clinical_mining.dataset import DrugIndicationEvidenceDataset
 
 
 def extract_chembl_indications(
-    raw_indications: DataFrame, exclude_trials: bool = False
+    raw_indications: pl.DataFrame, exclude_trials: bool = False
 ) -> DrugIndicationEvidenceDataset:
     """
     Extract drug/indication relationships from ChEMBL Indications dataset.
@@ -20,24 +19,29 @@ def extract_chembl_indications(
 
     indications = (
         raw_indications.select(
-            f.explode("_metadata.all_molecule_chembl_ids").alias("drug_id"),
-            f.translate("efo_id", ":", "_").alias("disease_id"),
+            pl.col("_metadata").struct.field("all_molecule_chembl_ids").alias("drug_ids"),
+            pl.col("efo_id").str.replace(":", "_").alias("disease_id"),
             "indication_refs",
         )
-        .withColumn("indication_ref", f.explode("indication_refs"))
-        # A drug/disease pair can be supported by multiple trials in a single record (e.g. CHEMBL108/EFO_0004263)
-        .withColumn("studyId", f.explode(f.split(f.col("indication_ref.ref_id"), ",")))
-        .withColumn("source", f.col("indication_ref.ref_type"))
-        .withColumn(
-            "url",
-            f.when(
-                f.col("source") == "ClinicalTrials",
-                f.concat(f.lit("https://clinicaltrials.gov/search?term="), f.col("studyId")),
-            ).otherwise(f.col("indication_ref.ref_url")),
+        .explode("indication_refs")
+        .with_columns(
+            pl.col("indication_refs").struct.field("ref_id").str.split(",").alias("studyId"),
+            pl.col("indication_refs").struct.field("ref_type").alias("source"),
+            pl.col("indication_refs").struct.field("ref_url").alias("url"),
         )
-        .drop("indication_refs", "indication_ref")
-        .distinct()
+        .explode("studyId")
+        .explode("drug_ids")  # Explode drug_ids after all other explodes
+        .rename({"drug_ids": "drug_id"})
+        .with_columns(
+            url=pl.when(pl.col("source") == "ClinicalTrials")
+            .then(pl.concat_str([pl.lit("https://clinicaltrials.gov/search?term="), pl.col("studyId")]))
+            .otherwise(pl.col("url"))
+        )
+        .drop("indication_refs")
+        .unique()
     )
+
     if exclude_trials:
-        return indications.filter(f.col("source") != "ClinicalTrials")
+        indications = indications.filter(pl.col("source") != "ClinicalTrials")
+
     return DrugIndicationEvidenceDataset(df=indications)

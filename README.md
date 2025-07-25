@@ -15,7 +15,7 @@ This project provides tools to fetch, process, and annotate clinical trial data 
 ### Key Features
 
 - **Direct Connection to AACT:** Uses a robust connector to securely access the AACT PostgreSQL database.
-- **Automated Table Loading:** Loads and filters relevant tables (studies, interventions, conditions, etc.) using Spark for scalable processing.
+- **Automated Table Loading:** Loads and filters relevant tables (studies, interventions, conditions, etc.) using PolarsS for scalable processing.
 - **Drug and Disease Mapping:** Integrates external drug and disease vocabularies to annotate interventions and indications in trials.
 - **Output:** Produces harmonized datasets suitable for downstream analytics, including drug–disease mappings.
 
@@ -23,8 +23,7 @@ This project provides tools to fetch, process, and annotate clinical trial data 
 
 1. **AACT Database**  
 
-    AACT database is a PostgreSQL database containing clinical trial data from the ClinicalTrials.gov database.
-    Spark Session is connected to the AACT PostgreSQL database using JDBC. Credentials and connection parameters are provided via configuration.
+    AACT database is a PostgreSQL database containing clinical trial data from the ClinicalTrials.gov database. We use Polars to connect to the database and return queried data in a DataFrame format.Credentials and connection parameters are provided via configuration.
 
 2. **ChEMBL Drug Indication Data**
 
