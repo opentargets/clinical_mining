@@ -27,10 +27,12 @@ class DrugIndicationEvidenceDataset:
         approved_indications = (
             indications.filter(pl.col("source").is_in(SOURCES_FOR_APPROVAL))
             .with_columns(
-                approval=pl.struct([
-                    pl.col("source").alias("source"),
-                    pl.lit(None, dtype=pl.Date).alias("date"),
-                ])
+                approval=pl.struct(
+                    [
+                        pl.col("source").alias("source"),
+                        pl.lit(None, dtype=pl.Date).alias("date"),
+                    ]
+                )
             )
             .group_by("drug_id", "disease_id")
             .agg(pl.col("approval").unique().alias("approval"))
@@ -67,7 +69,7 @@ class DrugIndicationDataset:
         validate_schema(evidence, DrugIndicationEvidence)
 
         study_metadata_cols = cls._get_study_metadata_columns(evidence)
-        
+
         agg_df = (
             evidence.with_columns(
                 study_info=pl.struct([pl.col(c) for c in study_metadata_cols])
@@ -78,3 +80,16 @@ class DrugIndicationDataset:
             )
         )
         return cls(df=agg_df)
+
+    def filter_by_studyid(self, studyId: str) -> "DrugIndicationDataset":
+        """Get associations supported by a given study; for example, a clinical trial ID."""
+
+        return DrugIndicationDataset(
+            df=self.df.with_columns(
+                pl.col("sources")
+                .list.eval(pl.element().struct["studyId"])
+                .alias("studyIds"),
+            )
+            .filter(pl.col("studyIds").list.contains(studyId))
+            .drop("studyIds")
+        )

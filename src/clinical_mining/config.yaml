@@ -11,7 +11,7 @@ db_properties:
 
 # Pipeline Configuration
 mode:
-  debug: true
+  debug: false
   debug_study_id: "NCT00004465"
 
 # Path Definitions for Local Datasets
