@@ -4,15 +4,12 @@
 
 # Database Connection Properties
 db_properties:
-  url: "aact-db.ctti-clinicaltrials.org:5432/aact"
-  schema: ctgov
-  user: ???       
-  password: ???
-
-# Pipeline Configuration
-mode:
-  debug: false
-  debug_study_id: "NCT00004465"
+  aact:
+    type: postgresql
+    uri: localhost:5432/aact # aact-db.ctti-clinicaltrials.org:5432/aact
+    schema: ctgov
+    user: null
+    password: null
 
 # Path Definitions for Local Datasets
 datasets:

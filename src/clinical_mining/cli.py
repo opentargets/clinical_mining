@@ -4,7 +4,9 @@ from pathlib import Path
 import hydra
 from omegaconf import DictConfig
 import polars as pl
+
 from clinical_mining.utils.pipeline import execute_step
+from clinical_mining.utils.db import construct_db_url, load_db_table
 
 
 @hydra.main(
@@ -15,19 +17,23 @@ def main(cfg: DictConfig) -> pl.DataFrame:
     data_store = {}
 
     # Construct database URI from config
-    db_uri = f"postgresql://{cfg.db_properties.user}:{cfg.db_properties.password}@{cfg.db_properties.url}"
+    aact_url = construct_db_url(
+        db_type=cfg.db_properties.aact.type,
+        db_uri=cfg.db_properties.aact.uri,
+        db_user=cfg.db_properties.aact.user,
+        db_password=cfg.db_properties.aact.password,
+    )
 
     # Load all data sources
     for name, source in cfg.inputs.items():
         print(f"Loading input: {name}")
-        # TODO: implement load_table / print_table_schema?
         if source.type == "db_table":
-            query = f"SELECT {', '.join(source.select_cols)} FROM {cfg.db_properties.schema}.{name}"
-            if cfg.mode.debug and "nct_id" in source.select_cols:
-                study_id = cfg.mode.debug_study_id
-                query += f" WHERE nct_id = '{study_id}'"
-                print(f"  [DEBUG MODE] Filtering {name} for study: {study_id}")
-            data_store[name] = pl.read_database_uri(query=query, uri=db_uri)
+            data_store[name] = load_db_table(
+                table_name=name,
+                db_url=aact_url,
+                select_cols=list(source.select_cols),
+                db_schema=cfg.db_properties.aact.schema,
+            )
         elif source.type == "file":
             if source.format == "json":
                 data_store[name] = pl.read_ndjson(source.path)
