@@ -1,5 +1,4 @@
-from pyspark.sql import DataFrame
-from pyspark.sql import functions as f
+import polars as pl
 
 from clinical_mining.schemas import (
     validate_schema,
@@ -9,33 +8,34 @@ from clinical_mining.schemas import (
 
 
 class DrugIndicationEvidenceDataset:
-    """A dataset for drug-indication evidence, wrapping a Spark DataFrame."""
+    """A dataset for drug-indication evidence, wrapping a Polars DataFrame."""
 
-    def __init__(self, df: DataFrame):
+    def __init__(self, df: pl.DataFrame):
         """Initializes the dataset, validating and aligning the DataFrame."""
         self.df = validate_schema(df, DrugIndicationEvidence)
 
     @staticmethod
     def assign_approval_status(
-        indications: DataFrame,
-    ) -> DataFrame:
+        indications: pl.DataFrame,
+    ) -> pl.DataFrame:
         """Assign approval status to the indications DataFrame.
 
         Args:
-            indications: DataFrame with drug/indication relationships, some of which come from a regulatory agency
+            indications: DataFrame with drug/indication relationships, some of which come from a regulatory agency.
         """
         SOURCES_FOR_APPROVAL = ["FDA", "EMA", "DailyMed"]
         approved_indications = (
-            indications.filter(f.col("source").isin(SOURCES_FOR_APPROVAL))
-            .withColumn(
-                "approval",
-                f.struct(
-                    f.col("source").alias("source"),
-                    f.lit(None).cast("date").alias("date"),
-                ),
+            indications.filter(pl.col("source").is_in(SOURCES_FOR_APPROVAL))
+            .with_columns(
+                approval=pl.struct(
+                    [
+                        pl.col("source").alias("source"),
+                        pl.lit(None, dtype=pl.Date).alias("date"),
+                    ]
+                )
             )
-            .groupBy("drug_id", "disease_id")
-            .agg(f.collect_set("approval").alias("approval"))
+            .group_by("drug_id", "disease_id")
+            .agg(pl.col("approval").unique().alias("approval"))
         )
         return indications.join(
             approved_indications, on=["drug_id", "disease_id"], how="left"
@@ -43,7 +43,7 @@ class DrugIndicationEvidenceDataset:
 
 
 class DrugIndicationDataset:
-    """A dataset for drug-indication relationships, wrapping a Spark DataFrame."""
+    """A dataset for drug-indication relationships, wrapping a Polars DataFrame."""
 
     AGGREGATION_FIELDS = {
         "drug_id",
@@ -53,35 +53,43 @@ class DrugIndicationDataset:
         "approval",
     }
 
-    def __init__(self, df: DataFrame):
+    def __init__(self, df: pl.DataFrame):
         """Initializes the dataset, validating and aligning the DataFrame."""
         self.df = validate_schema(df, DrugIndication)
 
     @classmethod
-    def _get_study_metadata_columns(cls, df: DataFrame) -> list[str]:
+    def _get_study_metadata_columns(cls, df: pl.DataFrame) -> list[str]:
         """Get all columns that represent study metadata (everything except aggregation fields)."""
-        return sorted(set(df.columns) - cls.AGGREGATION_FIELDS)
+        return sorted(list(set(df.columns) - cls.AGGREGATION_FIELDS))
 
     @classmethod
-    def from_evidence(cls, evidence: DataFrame) -> "DrugIndicationDataset":
+    def from_evidence(cls, evidence: pl.DataFrame) -> "DrugIndicationDataset":
         """Aggregate drug/indication evidence into a DrugIndicationDataset."""
         # Assert validity of evidence
         validate_schema(evidence, DrugIndicationEvidence)
 
+        study_metadata_cols = cls._get_study_metadata_columns(evidence)
+
         agg_df = (
-            evidence.withColumn(
-                "study_info",
-                f.struct(
-                    *[
-                            f.col(c).alias(c)
-                            for c in cls._get_study_metadata_columns(evidence)
-                    ],
-                ),
+            evidence.with_columns(
+                study_info=pl.struct([pl.col(c) for c in study_metadata_cols])
             )
-            .groupBy(*cls.AGGREGATION_FIELDS)
+            .group_by(list(cls.AGGREGATION_FIELDS))
             .agg(
-                f.collect_set("study_info").alias("sources"),
-                # f.collect_set("approval").alias("approval"), TODO: remove from agg keys
+                pl.col("study_info").unique().alias("sources"),
             )
         )
         return cls(df=agg_df)
+
+    def filter_by_studyid(self, studyId: str) -> "DrugIndicationDataset":
+        """Get associations supported by a given study; for example, a clinical trial ID."""
+
+        return DrugIndicationDataset(
+            df=self.df.with_columns(
+                pl.col("sources")
+                .list.eval(pl.element().struct["studyId"])
+                .alias("studyIds"),
+            )
+            .filter(pl.col("studyIds").list.contains(studyId))
+            .drop("studyIds")
+        )

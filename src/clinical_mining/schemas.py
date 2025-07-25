@@ -1,10 +1,10 @@
-from pyspark.sql import DataFrame
+import polars as pl
 from pydantic import BaseModel, ConfigDict, Field
 
 from enum import Enum
 
 
-def validate_schema(df: DataFrame, model: type[BaseModel]) -> DataFrame:
+def validate_schema(df: pl.DataFrame, model: type[BaseModel]) -> pl.DataFrame:
     """Validates that all mandatory schema fields are present. Resulting DataFrame is reordered to show core fields first."""
     mandatory_fields = [
         field_name
@@ -15,8 +15,8 @@ def validate_schema(df: DataFrame, model: type[BaseModel]) -> DataFrame:
         raise ValueError(
             f"Missing mandatory fields: {set(mandatory_fields) - set(df.columns)}"
         )
-    extra_fields = set(df.columns) - set(mandatory_fields)
-    return df.select(mandatory_fields + list(extra_fields))
+    extra_fields = list(set(df.columns) - set(mandatory_fields))
+    return df.select(mandatory_fields + extra_fields)
 
 
 class DrugIndicationSource(str, Enum):
@@ -66,11 +66,13 @@ class DrugIndicationEvidence(BaseModel):
         ...,
         description="The study identifier that supports the drug/indication relationship.",
     )
-    drug_name: str = Field(..., description="The name of the drug.")
-    disease_name: str = Field(..., description="The name of the disease.")
     source: DrugIndicationSource = Field(
         ..., description="The data source of the evidence."
     )
+    drug_name: str | None = Field(
+        default=None, description="The name of the drug.")
+    disease_name: str | None = Field(
+        default=None, description="The name of the disease.")
     drug_id: str | None = Field(
         default=None,
         description="The ChEMBL ID corresponding to the drug.",
