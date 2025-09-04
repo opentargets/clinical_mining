@@ -45,25 +45,11 @@ inputs:
       - nct_id
       - intervention_type
       - name
-  browse_interventions:
-    type: db_table
-    select_cols:
-      - id
-      - nct_id
-      - mesh_term
-      - downcase_mesh_term
-      - mesh_type
   conditions:
     type: db_table
     select_cols:
       - nct_id
       - downcase_name
-  browse_conditions:
-    type: db_table
-    select_cols:
-      - nct_id
-      - downcase_mesh_term
-      - mesh_type
   study_references:
     type: db_table
     select_cols:
@@ -105,16 +91,6 @@ pipeline:
       parameters:
         studies: $studies
         additional_metadata: ['$study_references', '$designs', '$brief_summaries']
-
-  # GENERATE: Steps that generate the core drug/indication DataFrames.
-  generate:
-    - name: aact_indications
-      function: clinical_mining.data_sources.aact.aact.extract_drug_indications
-      parameters:
-        interventions: $interventions
-        conditions: $conditions
-        browse_conditions: $browse_conditions
-        browse_interventions: $browse_interventions
     - name: chembl_curation
       function: clinical_mining.data_sources.chembl.curation.extract_chembl_ct_curation
       parameters:
@@ -125,12 +101,29 @@ pipeline:
         db_password: ${db_properties.chembl.password}
         oracle_client_path: ${db_properties.chembl.oracle_client_path}
 
+  # GENERATE: Steps that generate the core drug/indication DataFrames.
+  generate:
+    - name: aact_indications
+      function: clinical_mining.data_sources.aact.aact.extract_drug_indications
+      parameters:
+        interventions: $interventions
+        conditions: $conditions
+    - name: chembl_indications
+      function: clinical_mining.data_sources.chembl.indications.extract_chembl_indications
+      parameters:
+        raw_indications: $chembl_indications_raw
+        exclude_trials: true
+
   # POST-PROCESS: Final transformation steps that run sequentially on the unified `indications` DataFrame.
   post_process:
+    - name: indications
+      function: clinical_mining.utils.polars_helpers.union_dfs
+      parameters:
+        dfs: [$aact_indications, $chembl_indications]
     - name: indications_w_metadata
       function: clinical_mining.utils.polars_helpers.join_dfs
       parameters:
-        dfs: [$aact_indications, $trials]
+        dfs: [$indications, $trials]
         join_on: studyId
         how: left
     - name: trials_mapped_curation
