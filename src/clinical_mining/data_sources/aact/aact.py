@@ -60,21 +60,17 @@ def extract_clinical_trials(
 def extract_drug_indications(
     interventions: pl.DataFrame,
     conditions: pl.DataFrame,
-    browse_conditions: pl.DataFrame,
-    browse_interventions: pl.DataFrame,
 ) -> DrugIndicationEvidenceDataset:
     """Extract drug/indication relationships from AACT database.
 
     Args:
         interventions (pl.DataFrame): Interventions table with interventions or exposures of interest to the study, or associated with study arms/groups.
         conditions (pl.DataFrame): Conditions table with name(s) of the condition(s) studied in the clinical study, or the focus of the clinical study.
-        browse_conditions (pl.DataFrame): Browse_conditions table with MeSH terms that describe the condition(s) being addressed by the clinical trial.
-        browse_interventions (pl.DataFrame): Browse_interventions table with MeSH terms that describe the intervention(s) of interest to the study, or associated with study arms/groups.
     Returns:
         DrugIndicationEvidenceDataset: The processed drug/indication relationships.
     """
-    processed_interventions = process_interventions(interventions, browse_interventions)
-    processed_conditions = process_conditions(conditions, browse_conditions)
+    processed_interventions = process_interventions(interventions)
+    processed_conditions = process_conditions(conditions)
     return DrugIndicationEvidenceDataset(
         df=(
             processed_interventions.join(

@@ -90,8 +90,6 @@ pipeline:
       parameters:
         interventions: $interventions
         conditions: $conditions
-        browse_conditions: $browse_conditions
-        browse_interventions: $browse_interventions
     - name: chembl_indications
       function: clinical_mining.data_sources.chembl.indications.extract_chembl_indications
       parameters:
