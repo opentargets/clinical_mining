@@ -10,12 +10,21 @@ db_properties:
     schema: ctgov
     user: null
     password: null
+  
+  chembl:
+    type: oracle
+    host: ora-vm-089
+    port: 1531
+    service: CHEMPRO
+    user: null
+    password: null
+    oracle_client_path: /opt/oracle/instantclient_23_3
 
 # Path Definitions for Local Datasets
 datasets:
   chembl_indications_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/inputs/chembl_drug_indication.jsonl # ???
-  disease_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/inputs/disease # ???
-  molecule_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/inputs/drug_molecule # ???
+  disease_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/inputs/disease # null
+  molecule_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/inputs/drug_molecule # null
   output_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/outputs/clinical_trials # ???
 
 # Input Data Sources - Each key becomes the name of a DataFrame available to the pipeline steps.
@@ -106,28 +115,34 @@ pipeline:
         conditions: $conditions
         browse_conditions: $browse_conditions
         browse_interventions: $browse_interventions
-    - name: chembl_indications
-      function: clinical_mining.data_sources.chembl.indications.extract_chembl_indications
+    - name: chembl_curation
+      function: clinical_mining.data_sources.chembl.curation.extract_chembl_ct_curation
       parameters:
-        raw_indications: $chembl_indications_raw
-        exclude_trials: true
+        db_host: ${db_properties.chembl.host}
+        db_port: ${db_properties.chembl.port}
+        db_service: ${db_properties.chembl.service}
+        db_user: ${db_properties.chembl.user}
+        db_password: ${db_properties.chembl.password}
+        oracle_client_path: ${db_properties.chembl.oracle_client_path}
 
   # POST-PROCESS: Final transformation steps that run sequentially on the unified `indications` DataFrame.
   post_process:
-    - name: indications
-      function: clinical_mining.utils.polars_helpers.union_dfs
-      parameters:
-        dfs: [$aact_indications, $chembl_indications]
     - name: indications_w_metadata
       function: clinical_mining.utils.polars_helpers.join_dfs
       parameters:
-        dfs: [$indications, $trials]
+        dfs: [$aact_indications, $trials]
+        join_on: studyId
+        how: left
+    - name: trials_mapped_curation
+      function: clinical_mining.utils.polars_helpers.join_dfs
+      parameters:
+        dfs: [$indications_w_metadata, $chembl_curation]
         join_on: studyId
         how: left
     - name: trials_mapped_drug
       function: clinical_mining.utils.mapping.assign_drug_id
       parameters:
-        df: $indications_w_metadata
+        df: $trials_mapped_curation
         molecule: $molecule
         verbose: false
     - name: trials_mapped_drug_disease
