@@ -36,25 +36,11 @@ inputs:
       - nct_id
       - intervention_type
       - name
-  browse_interventions:
-    type: db_table
-    select_cols:
-      - id
-      - nct_id
-      - mesh_term
-      - downcase_mesh_term
-      - mesh_type
   conditions:
     type: db_table
     select_cols:
       - nct_id
       - downcase_name
-  browse_conditions:
-    type: db_table
-    select_cols:
-      - nct_id
-      - downcase_mesh_term
-      - mesh_type
   study_references:
     type: db_table
     select_cols:
@@ -104,8 +90,6 @@ pipeline:
       parameters:
         interventions: $interventions
         conditions: $conditions
-        browse_conditions: $browse_conditions
-        browse_interventions: $browse_interventions
     - name: chembl_indications
       function: clinical_mining.data_sources.chembl.indications.extract_chembl_indications
       parameters:
