@@ -65,7 +65,7 @@ def extract_chembl_ct_curation(
         )
         .select(
             pl.col("NCT_ID").alias("studyId"),
-            pl.col("INTERVENTION_NAME").alias("disease_name"),
+            pl.col("INTERVENTION_NAME").alias("drug_name"),
             "MOLREGNO",
         )
         .drop_nulls()
@@ -89,10 +89,9 @@ def extract_chembl_ct_curation(
         .drop_nulls()
         .unique()
     )
-
     return (
-        chembl.join(trial_to_drug, "MOLREGNO")
-        .join(trial_to_efo, "studyId")
-        .select("studyId", "drug_id", "disease_id")
+        trial_to_drug.join(trial_to_efo, "studyId", how="left")
+        .join(chembl, "MOLREGNO", how="inner")
+        .select("studyId", "drug_id", "disease_id", "drug_name", "disease_name")
         .unique()
     )
