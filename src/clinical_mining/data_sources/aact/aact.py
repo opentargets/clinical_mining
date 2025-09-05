@@ -4,9 +4,7 @@ import polars as pl
 from clinical_mining.dataset import ClinicalStudyDataset, DrugIndicationEvidenceDataset
 
 
-def process_interventions(
-    interventions: pl.DataFrame
-) -> pl.DataFrame:
+def process_interventions(interventions: pl.DataFrame) -> pl.DataFrame:
     """Extract relevant MeSH terms for interventional studies.
 
     Args:
@@ -34,17 +32,22 @@ def process_conditions(
     Returns:
         pl.DataFrame: Conditions table with MeSH terms.
     """
-    return conditions.rename({"nct_id": "studyId", "downcase_name": "disease_name"}).unique()
+    return conditions.rename(
+        {"nct_id": "studyId", "downcase_name": "disease_name"}
+    ).unique()
 
 
 def extract_clinical_trials(
-    studies: pl.DataFrame, additional_metadata: list[pl.DataFrame] | None = None
+    studies: pl.DataFrame,
+    additional_metadata: list[pl.DataFrame] | None = None,
+    aggregation_specs: dict[str, dict[str, str]] | None = None,
 ) -> ClinicalStudyDataset:
     """Return clinical trials with desired extra annotations from other tables.
 
     Args:
         studies (pl.DataFrame): The studies to process.
         additional_metadata (list[pl.DataFrame] | None): Optional list of DataFrames to join on and add additional metadata.
+        aggregation_specs (dict[str, dict[str, str]] | None): Optional dictionary of aggregation specifications for the additional metadata DataFrames.
 
     Returns:
         ClinicalStudyDataset: The processed studies.
@@ -53,6 +56,14 @@ def extract_clinical_trials(
     studies = studies.filter(pl.col("study_type").is_in(STUDY_TYPES))
     if additional_metadata is not None:
         for metadata_df in additional_metadata:
+            # Check if any of the metadata needs aggregating before joining
+            if aggregation_specs:
+                for key, spec in aggregation_specs.items():
+                    if key in metadata_df.columns:
+                        metadata_df = metadata_df.group_by(spec["group_by"]).agg(
+                            pl.col(key).alias(spec["alias"])
+                        )
+
             studies = studies.join(metadata_df, on="nct_id", how="left")
     return ClinicalStudyDataset(df=studies.rename({"nct_id": "studyId"}))
 
@@ -81,9 +92,12 @@ def extract_drug_indications(
             .with_columns(
                 source=pl.lit("AACT"),
                 url=pl.concat_str(
-                    [pl.lit("https://clinicaltrials.gov/search?term="), pl.col("studyId")],
+                    [
+                        pl.lit("https://clinicaltrials.gov/search?term="),
+                        pl.col("studyId"),
+                    ],
                     separator="",
-                )
+                ),
             )
             .unique()
         )
