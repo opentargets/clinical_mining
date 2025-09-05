@@ -100,6 +100,10 @@ pipeline:
       parameters:
         studies: $studies
         additional_metadata: ['$study_references', '$designs', '$brief_summaries']
+        aggregation_specs: 
+          pmid: 
+            group_by: nct_id
+            alias: literature
 
   # GENERATE: Steps that generate the core drug/indication DataFrames.
   generate:
