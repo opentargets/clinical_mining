@@ -5,63 +5,50 @@ def normalise_label(label: pl.Series) -> pl.Series:
     return label.str.to_lowercase().str.replace(r"[^a-z0-9]", "")
 
 
-def assign_drug_id(
-    df: pl.DataFrame, molecule: pl.DataFrame, verbose: bool = True
+def assign_entity_id(
+    df: pl.DataFrame,
+    mapping_index: pl.DataFrame,
+    chembl_curation: pl.DataFrame,
+    entity_type: str,
+    verbose: bool = True,
 ) -> pl.DataFrame:
-    """Assigns drug IDs by joining with a molecule mapping table."""
+    """Assigns entity IDs (drug or disease) by joining with a mapping table and ChEMBL's curation data."""
+    # TODO: Refactor to use ChEMBL curation into OnToma
+
+    name_col = f"{entity_type}_name"
+    names_col = f"{entity_type}_names"
+    id_col = f"{entity_type}_id"
+    normalised_name_col = f"normalised_{entity_type}_name"
+    mapped_id_col = f"mapped_{entity_type}_id"
+
+    lut = pl.concat(
+        [
+            mapping_index.explode(names_col).rename({names_col: name_col}),
+            chembl_curation.filter(pl.col(name_col).is_not_null()),
+        ],
+        how="diagonal",
+    ).select(
+        pl.col(id_col).alias(mapped_id_col),
+        normalise_label(pl.col(name_col)).alias(normalised_name_col),
+    )
+
     df_w_id = (
-        df.with_columns(
-            normalised_drug_name=normalise_label(pl.col("drug_name")).alias(
-                "normalised_drug_name"
-            )
-        )
+        df.with_columns(normalise_label(pl.col(name_col)).alias(normalised_name_col))
         .join(
-            molecule.explode("drug_names").with_columns(
-                normalised_drug_name=normalise_label(pl.col("drug_names")).alias(
-                    "normalised_drug_name"
-                )
-            ),
-            on="normalised_drug_name",
+            lut,
+            on=normalised_name_col,
             how="left",
         )
-        .with_columns(drug_id=pl.coalesce(["drug_id", "mapped_drug_id"]))
-        .drop("mapped_drug_id", "normalised_drug_name")
+        .with_columns(pl.coalesce(pl.col(id_col), pl.col(mapped_id_col)).alias(id_col))
+        .drop(mapped_id_col, normalised_name_col)
     )
-    if verbose:
-        unmapped_count = df_w_id.filter(pl.col("drug_id").is_null()).height
-        mapped_count = df_w_id.filter(pl.col("drug_id").is_not_null()).height
-        print(f"Unmapped drug rows: {unmapped_count}")
-        print(f"Mapped drug rows: {mapped_count}")
-    return df_w_id
 
-
-def assign_disease_id(
-    df: pl.DataFrame, diseases: pl.DataFrame, verbose: bool = True
-) -> pl.DataFrame:
-    """Assigns disease IDs by joining with a disease mapping table."""
-    df_w_id = (
-        df.with_columns(
-            normalised_disease_name=normalise_label(pl.col("disease_name")).alias(
-                "normalised_disease_name"
-            )
-        )
-        .join(
-            diseases.explode("disease_names").with_columns(
-                normalised_disease_name=normalise_label(pl.col("disease_names")).alias(
-                    "normalised_disease_name"
-                )
-            ),
-            on="normalised_disease_name",
-            how="left",
-        )
-        .with_columns(disease_id=pl.coalesce(["disease_id", "mapped_disease_id"]))
-        .drop("mapped_disease_id", "normalised_disease_name")
-    )
     if verbose:
-        unmapped_count = df_w_id.filter(pl.col("disease_id").is_null()).height
-        mapped_count = df_w_id.filter(pl.col("disease_id").is_not_null()).height
-        print(f"Unmapped disease rows: {unmapped_count}")
-        print(f"Mapped disease rows: {mapped_count}")
+        unmapped_count = df_w_id.filter(pl.col(id_col).is_null()).height
+        mapped_count = df_w_id.filter(pl.col(id_col).is_not_null()).height
+        print(f"Unmapped {entity_type} rows: {unmapped_count}")
+        print(f"Mapped {entity_type} rows: {mapped_count}")
+
     return df_w_id
 
 
@@ -74,7 +61,7 @@ def process_molecule(path: str) -> pl.DataFrame:
                 [pl.col("synonyms"), pl.col("name"), pl.col("tradeNames")]
             ).list.unique()
         )
-        .select(pl.col("id").alias("mapped_drug_id"), "drug_names")
+        .select(pl.col("id").alias("drug_id"), "drug_names")
     )
 
 
@@ -84,9 +71,13 @@ def process_disease(path: str) -> pl.DataFrame:
         pl.read_parquet(path)
         .with_columns(
             disease_names=pl.concat_list(
-                [pl.col("synonyms"), pl.col("name"), pl.col("synonyms").struct.field("hasExactSynonym")]
+                [
+                    pl.col("synonyms"),
+                    pl.col("name"),
+                    pl.col("synonyms").struct.field("hasExactSynonym"),
+                ]
             ).list.unique()
         )
-        .select(pl.col("id").alias("mapped_disease_id"), "disease_names")
+        .select(pl.col("id").alias("disease_id"), "disease_names")
         .unique()
     )

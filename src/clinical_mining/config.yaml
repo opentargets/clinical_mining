@@ -10,12 +10,21 @@ db_properties:
     schema: ctgov
     user: null
     password: null
+  
+  chembl:
+    type: oracle
+    host: ora-vm-089
+    port: 1531
+    service: CHEMPRO
+    user: null
+    password: null
+    oracle_client_path: /opt/oracle/instantclient_23_3
 
 # Path Definitions for Local Datasets
 datasets:
   chembl_indications_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/inputs/chembl_drug_indication.jsonl # ???
-  disease_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/inputs/disease # ???
-  molecule_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/inputs/drug_molecule # ???
+  disease_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/inputs/disease # null
+  molecule_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/inputs/drug_molecule # null
   output_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/outputs/clinical_trials # ???
 
 # Input Data Sources - Each key becomes the name of a DataFrame available to the pipeline steps.
@@ -77,6 +86,15 @@ pipeline:
       function: clinical_mining.utils.mapping.process_disease
       parameters:
         path: ${datasets.disease_path}
+    - name: chembl_curation
+      function: clinical_mining.data_sources.chembl.curation.extract_chembl_ct_curation
+      parameters:
+        db_host: ${db_properties.chembl.host}
+        db_port: ${db_properties.chembl.port}
+        db_service: ${db_properties.chembl.service}
+        db_user: ${db_properties.chembl.user}
+        db_password: ${db_properties.chembl.password}
+        oracle_client_path: ${db_properties.chembl.oracle_client_path}
     - name: trials
       function: clinical_mining.data_sources.aact.aact.extract_clinical_trials
       parameters:
@@ -109,16 +127,20 @@ pipeline:
         join_on: studyId
         how: left
     - name: trials_mapped_drug
-      function: clinical_mining.utils.mapping.assign_drug_id
+      function: clinical_mining.utils.mapping.assign_entity_id
       parameters:
         df: $indications_w_metadata
-        molecule: $molecule
+        mapping_index: $molecule
+        chembl_curation: $chembl_curation
+        entity_type: drug
         verbose: false
     - name: trials_mapped_drug_disease
-      function: clinical_mining.utils.mapping.assign_disease_id
+      function: clinical_mining.utils.mapping.assign_entity_id
       parameters:
         df: $trials_mapped_drug
-        diseases: $disease
+        mapping_index: $disease
+        chembl_curation: $chembl_curation
+        entity_type: disease
         verbose: false
     - name: approval_assessment
       function: clinical_mining.dataset.DrugIndicationEvidenceDataset.assign_approval_status

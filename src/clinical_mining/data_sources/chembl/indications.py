@@ -9,7 +9,7 @@ def extract_chembl_indications(
     raw_indications: pl.DataFrame, exclude_trials: bool = False
 ) -> DrugIndicationEvidenceDataset:
     """
-    Extract drug/indication relationships from ChEMBL Indications dataset.
+    Extract drug/indication relationships from ChEMBL Indications JSON file storing indications for drugs, and clinical candidate drugs, from a variety of sources (e.g., FDA, EMA, WHO ATC, ClinicalTrials.gov, INN, USAN).
 
     Args:
         raw_indications: ChEMBL Indications dataset in JSON form

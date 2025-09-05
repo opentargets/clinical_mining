@@ -6,7 +6,7 @@ from omegaconf import DictConfig
 import polars as pl
 
 from clinical_mining.utils.pipeline import execute_step
-from clinical_mining.utils.db import construct_db_url, load_db_table
+from clinical_mining.utils.db import construct_db_uri, load_db_table
 
 
 @hydra.main(
@@ -17,7 +17,7 @@ def main(cfg: DictConfig) -> pl.DataFrame:
     data_store = {}
 
     # Construct database URI from config
-    aact_url = construct_db_url(
+    aact_url = construct_db_uri(
         db_type=cfg.db_properties.aact.type,
         db_uri=cfg.db_properties.aact.uri,
         db_user=cfg.db_properties.aact.user,

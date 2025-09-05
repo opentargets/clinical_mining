@@ -27,7 +27,11 @@ This project provides tools to fetch, process, and annotate clinical trial data 
 
 2. **ChEMBL Drug Indication Data**
 
-   JSON file storing indications for drugs, and clinical candidate drugs, from a variety of sources (e.g., FDA, EMA, WHO ATC, ClinicalTrials.gov, INN, USAN).
+    JSON file storing indications for drugs, and clinical candidate drugs, from a variety of sources (e.g., FDA, EMA, WHO ATC, ClinicalTrials.gov, INN, USAN).
+
+3. **ChEMBL Clinical Trials Pipeline**
+
+   The private DRUGBASE_CURATION database in ChEMBL stores metadata related to clinical trials. After processing data from ClinicalTrials.gov, their internal pipeline automatically assigns an EFO ID to each condition and a ChEMBL ID to each intervention mentioned in the trials. This database is used to map the conditions and interventions in the AACT database to ChEMBL and EFO IDs, and it **requires a valid ChEMBL user account** to access.
 
 ## Usage
 
@@ -62,7 +66,7 @@ The pipeline is structured as a Directed Acyclic Graph (DAG) with three main sta
 2.  **`union`**: Steps that generate the primary drug/indication DataFrames. The outputs of all steps in this section are combined into a single DataFrame.
 3.  **`process`**: Final transformation steps that run sequentially on the unified DataFrame.
 
-The final, annotated dataset is saved in Parquet format for further analysis.
+The final, annotated dataset (named `final_df` in the config) is saved in Parquet format for further analysis.
 
 ### Configuring a Pipeline Step
 
