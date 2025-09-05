@@ -127,18 +127,20 @@ pipeline:
         join_on: studyId
         how: left
     - name: trials_mapped_drug
-      function: clinical_mining.utils.mapping.assign_drug_id
+      function: clinical_mining.utils.mapping.assign_entity_id
       parameters:
         df: $indications_w_metadata
-        molecule: $molecule
+        mapping_index: $molecule
         chembl_curation: $chembl_curation
+        entity_type: drug
         verbose: false
     - name: trials_mapped_drug_disease
-      function: clinical_mining.utils.mapping.assign_disease_id
+      function: clinical_mining.utils.mapping.assign_entity_id
       parameters:
         df: $trials_mapped_drug
+        mapping_index: $disease
         chembl_curation: $chembl_curation
-        diseases: $disease
+        entity_type: disease
         verbose: false
     - name: approval_assessment
       function: clinical_mining.dataset.DrugIndicationEvidenceDataset.assign_approval_status
