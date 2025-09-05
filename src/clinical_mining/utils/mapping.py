@@ -6,9 +6,27 @@ def normalise_label(label: pl.Series) -> pl.Series:
 
 
 def assign_drug_id(
-    df: pl.DataFrame, molecule: pl.DataFrame, verbose: bool = True
+    df: pl.DataFrame,
+    molecule: pl.DataFrame,
+    chembl_curation: pl.DataFrame,
+    verbose: bool = True,
 ) -> pl.DataFrame:
-    """Assigns drug IDs by joining with a molecule mapping table."""
+    """Assigns drug IDs by joining with a molecule mapping table + ChEMBL clinical trial curation."""
+    # TODO: Refactor to use ChEMBL curation into OnToma
+    drug_lut = pl.concat(
+        [
+            molecule.explode("drug_names").with_columns(
+                normalised_drug_name=normalise_label(pl.col("drug_names")).alias(
+                    "normalised_drug_name"
+                )
+            ),
+            chembl_curation.filter(pl.col("drug_name").is_not_null()).select(
+                normalise_label(pl.col("drug_name")).alias("normalised_drug_name"),
+                pl.col("drug_id").alias("mapped_drug_id"),
+            ),
+        ],
+        how="diagonal",
+    )
     df_w_id = (
         df.with_columns(
             normalised_drug_name=normalise_label(pl.col("drug_name")).alias(
@@ -16,11 +34,7 @@ def assign_drug_id(
             )
         )
         .join(
-            molecule.explode("drug_names").with_columns(
-                normalised_drug_name=normalise_label(pl.col("drug_names")).alias(
-                    "normalised_drug_name"
-                )
-            ),
+            drug_lut,
             on="normalised_drug_name",
             how="left",
         )
@@ -36,9 +50,29 @@ def assign_drug_id(
 
 
 def assign_disease_id(
-    df: pl.DataFrame, diseases: pl.DataFrame, verbose: bool = True
+    df: pl.DataFrame,
+    diseases: pl.DataFrame,
+    chembl_curation: pl.DataFrame,
+    verbose: bool = True,
 ) -> pl.DataFrame:
-    """Assigns disease IDs by joining with a disease mapping table."""
+    """Assigns disease IDs by joining with a disease mapping table + ChEMBL clinical trial curation."""
+    # TODO: Refactor to use ChEMBL curation into OnToma
+    diseases_lut = pl.concat(
+        [
+            diseases.explode("disease_names").with_columns(
+                normalised_disease_name=normalise_label(pl.col("disease_names")).alias(
+                    "normalised_disease_name"
+                )
+            ),
+            chembl_curation.filter(pl.col("disease_name").is_not_null()).select(
+                normalise_label(pl.col("disease_name")).alias(
+                    "normalised_disease_name"
+                ),
+                pl.col("disease_id").alias("mapped_disease_id"),
+            ),
+        ],
+        how="diagonal",
+    )
     df_w_id = (
         df.with_columns(
             normalised_disease_name=normalise_label(pl.col("disease_name")).alias(
@@ -46,11 +80,7 @@ def assign_disease_id(
             )
         )
         .join(
-            diseases.explode("disease_names").with_columns(
-                normalised_disease_name=normalise_label(pl.col("disease_names")).alias(
-                    "normalised_disease_name"
-                )
-            ),
+            diseases_lut,
             on="normalised_disease_name",
             how="left",
         )
@@ -84,7 +114,11 @@ def process_disease(path: str) -> pl.DataFrame:
         pl.read_parquet(path)
         .with_columns(
             disease_names=pl.concat_list(
-                [pl.col("synonyms"), pl.col("name"), pl.col("synonyms").struct.field("hasExactSynonym")]
+                [
+                    pl.col("synonyms"),
+                    pl.col("name"),
+                    pl.col("synonyms").struct.field("hasExactSynonym"),
+                ]
             ).list.unique()
         )
         .select(pl.col("id").alias("mapped_disease_id"), "disease_names")

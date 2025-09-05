@@ -90,7 +90,7 @@ def extract_chembl_ct_curation(
         .unique()
     )
     return (
-        trial_to_drug.join(trial_to_efo, "studyId", how="left")
+        trial_to_drug.join(trial_to_efo, "studyId", how="full")
         .join(chembl, "MOLREGNO", how="inner")
         .select("studyId", "drug_id", "disease_id", "drug_name", "disease_name")
         .unique()

@@ -86,11 +86,6 @@ pipeline:
       function: clinical_mining.utils.mapping.process_disease
       parameters:
         path: ${datasets.disease_path}
-    - name: trials
-      function: clinical_mining.data_sources.aact.aact.extract_clinical_trials
-      parameters:
-        studies: $studies
-        additional_metadata: ['$study_references', '$designs', '$brief_summaries']
     - name: chembl_curation
       function: clinical_mining.data_sources.chembl.curation.extract_chembl_ct_curation
       parameters:
@@ -100,6 +95,11 @@ pipeline:
         db_user: ${db_properties.chembl.user}
         db_password: ${db_properties.chembl.password}
         oracle_client_path: ${db_properties.chembl.oracle_client_path}
+    - name: trials
+      function: clinical_mining.data_sources.aact.aact.extract_clinical_trials
+      parameters:
+        studies: $studies
+        additional_metadata: ['$study_references', '$designs', '$brief_summaries']
 
   # GENERATE: Steps that generate the core drug/indication DataFrames.
   generate:
@@ -126,22 +126,18 @@ pipeline:
         dfs: [$indications, $trials]
         join_on: studyId
         how: left
-    - name: trials_mapped_curation
-      function: clinical_mining.utils.polars_helpers.join_dfs
-      parameters:
-        dfs: [$indications_w_metadata, $chembl_curation]
-        join_on: studyId
-        how: left
     - name: trials_mapped_drug
       function: clinical_mining.utils.mapping.assign_drug_id
       parameters:
-        df: $trials_mapped_curation
+        df: $indications_w_metadata
         molecule: $molecule
+        chembl_curation: $chembl_curation
         verbose: false
     - name: trials_mapped_drug_disease
       function: clinical_mining.utils.mapping.assign_disease_id
       parameters:
         df: $trials_mapped_drug
+        chembl_curation: $chembl_curation
         diseases: $disease
         verbose: false
     - name: approval_assessment
