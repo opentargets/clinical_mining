@@ -1,46 +1,11 @@
 from pandas import DataFrame
 import polars as pl
 from pyspark.sql import SparkSession
-from pyspark.conf import SparkConf
 import pyspark.sql.functions as f
 from ontoma import OnToma
 from ontoma import OpenTargetsDisease, OpenTargetsDrug
-from clinical_mining.data_sources.chembl.curation import extract_chembl_ct_curation
 from ontoma.dataset.raw_entity_lut import RawEntityLUT
-
-
-def initialise_spark():
-    """OnToma works on Spark dataframes."""
-    # Stop any existing Spark sessions to avoid conflicts
-    try:
-        SparkSession.getActiveSession().stop()
-    except Exception:
-        pass
-    config = (
-        SparkConf()
-        .set("spark.jars.packages", "com.johnsnowlabs.nlp:spark-nlp_2.12:5.0.0")
-        .set("spark.driver.memory", "12g")
-        .set("spark.executor.memory", "12g")
-        .set("spark.driver.maxResultSize", "8g")
-        .set("spark.sql.adaptive.enabled", "true")
-        .set("spark.sql.adaptive.coalescePartitions.enabled", "true")
-        .set("spark.sql.adaptive.advisoryPartitionSizeInBytes", "128MB")
-        .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
-        .set("spark.kryoserializer.buffer.max", "1g")
-        .set("spark.executor.instances", "1")
-        .set("spark.executor.cores", "4")
-        .set("spark.driver.host", "localhost")
-        .set("spark.driver.bindAddress", "localhost")
-        .set("spark.ui.enabled", "false")
-        .set("spark.sql.shuffle.partitions", "200")
-        .set("spark.default.parallelism", "4")
-    )
-    return (
-        SparkSession.builder.appName("clinical_mining_entity_mapping")
-        .master("local[*]")
-        .config(conf=config)
-        .getOrCreate()
-    )
+from clinical_mining.utils.polars_helpers import convert_polars_to_spark
 
 
 def _create_curation_lut(
@@ -127,10 +92,10 @@ def _process_mapping_results(mapped_spark_df) -> pl.DataFrame:
 
 def map_entities(
     spark: SparkSession,
-    clinical_associations: DataFrame,
+    clinical_associations: pl.DataFrame,
     disease_index: DataFrame,
     drug_index: DataFrame,
-    chembl_curation: DataFrame,
+    chembl_curation: pl.DataFrame,
     drug_column_name: str,
     disease_column_name: str,
     drug_id_column_name: str = "drug_id",
@@ -146,20 +111,20 @@ def map_entities(
         clinical_associations: Polars DataFrame with clinical associations
         drug_column_name: Name of column containing drug names to map
         disease_column_name: Name of column containing disease names to map
-        disease_index_path: Path to disease index parquet file
-        drug_index_path: Path to drug molecule index parquet file
-        chembl_curation_path: Path to ChEMBL curation parquet file
+        disease_index: Spark DataFrame with disease index
+        drug_index: Spark DataFrame with drug molecule index
+        chembl_curation: Polars DataFrame with ChEMBL curation extracted in `extract_chembl_ct_curation`
         drug_id_column_name: Name for output drug ID column
         disease_id_column_name: Name for output disease ID column
 
     Returns:
         Polars DataFrame with added drug and disease ID columns
     """
-    # Convert to Spark DataFrame for OnToma processing
-    # associations_spark = spark.createDataFrame(
-    #     clinical_associations.to_pandas()
-    # ).repartition(200)
-    associations_spark = clinical_associations
+    # Convert only essential columns to Spark DataFrame for OnToma processing
+    associations_spark = convert_polars_to_spark(
+        clinical_associations.select(drug_column_name, disease_column_name), spark
+    )
+    chembl_curation_spark = convert_polars_to_spark(chembl_curation, spark)
 
     # Create entity lookup tables
     disease_label_lut = OpenTargetsDisease.as_label_lut(disease_index)
@@ -167,10 +132,10 @@ def map_entities(
 
     # Create curation lookup tables using the helper function
     curation_lut_disease = _create_curation_lut(
-        chembl_curation, "disease_id", "disease_name", "DS"
+        chembl_curation_spark, "disease_id", "disease_name", "DS"
     )
     curation_lut_drug = _create_curation_lut(
-        chembl_curation, "drug_id", "drug_name", "CD"
+        chembl_curation_spark, "drug_id", "drug_name", "CD"
     )
 
     # Prepare unified query DataFrame
@@ -244,33 +209,5 @@ def map_entities(
     if columns_to_drop:
         result_df = result_df.drop(columns_to_drop)
 
-    spark.stop()
+    # Note: Spark session should be managed by the calling code, not stopped here
     return result_df
-
-
-disease_path = "/Users/irenelopez/EBI/repos/clinical_mining/data/inputs/disease"
-drug_path = "/Users/irenelopez/EBI/repos/clinical_mining/data/inputs/drug_molecule"
-chembl_curation_path = "/Users/irenelopez/EBI/repos/clinical_mining/data/outputs/chembl_indications/0910.parquet"
-associations_path = "/Users/irenelopez/EBI/repos/clinical_mining/data/outputs/clinical_trials/2025-09-08"
-output_path = "/Users/irenelopez/EBI/repos/clinical_mining/data/outputs/experimental/mapped_clinical_trials/2025-10-14-pipeline.parquet"
-
-spark = initialise_spark()
-# clinical_associations = pl.read_parquet(associations_path)
-clinical_associations = spark.read.parquet(associations_path)
-disease_index = spark.read.parquet(disease_path)
-drug_index = spark.read.parquet(drug_path)
-chembl_curation = spark.read.parquet(chembl_curation_path) # TODO: from extract_chembl_ct_curation, expect polars
-
-
-mapped_associations = map_entities(
-    spark,
-    clinical_associations=clinical_associations,
-    disease_index=disease_index,
-    drug_index=drug_index,
-    chembl_curation=chembl_curation,
-    drug_column_name="drug_name",
-    disease_column_name="disease_name",
-)
-mapped_associations.write_parquet(output_path)
-
-spark.stop()
