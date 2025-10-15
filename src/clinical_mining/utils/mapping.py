@@ -168,15 +168,8 @@ def map_entities(
     polars_mapped_df = _process_mapping_results(mapped_df)
 
     # Join mapped IDs back to original associations
-    result_df = (
-        clinical_associations.drop(
-            [
-                col
-                for col in [drug_id_column_name, disease_id_column_name]
-                if col in clinical_associations.columns
-            ]
-        )  # Remove existing ID columns if present
-        .join(
+    return (
+        clinical_associations.join(
             # Add mapped disease IDs
             polars_mapped_df.filter(pl.col("entity_type") == "DS").select(
                 ["query_label", "disease_ids"]
@@ -199,15 +192,16 @@ def map_entities(
         .explode("disease_ids")
         .explode("drug_ids")
         .rename(
-            {"disease_ids": disease_id_column_name, "drug_ids": drug_id_column_name}
+            {
+                "disease_ids": f"new_{disease_id_column_name}",
+                "drug_ids": f"new_{drug_id_column_name}",
+            }
         )
+        .with_columns(
+            pl.coalesce(pl.col(disease_column_name), pl.col(f"new_{disease_id_column_name}"))
+            .alias(disease_id_column_name),
+            pl.coalesce(pl.col(drug_column_name), pl.col(f"new_{drug_id_column_name}"))
+            .alias(drug_id_column_name),
+        )        
     )
 
-    # Drop any remaining query_label columns if they exist
-    columns_to_drop = [col for col in result_df.columns if "query_label" in col]
-    print(columns_to_drop)
-    if columns_to_drop:
-        result_df = result_df.drop(columns_to_drop)
-
-    # Note: Spark session should be managed by the calling code, not stopped here
-    return result_df

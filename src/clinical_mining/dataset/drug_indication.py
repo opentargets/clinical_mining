@@ -24,6 +24,8 @@ class DrugIndicationEvidenceDataset:
             indications: DataFrame with drug/indication relationships, some of which come from a regulatory agency.
         """
         SOURCES_FOR_APPROVAL = ["FDA", "EMA", "DailyMed"]
+        print("APPROVAL FUNCTION")
+        print(indications.filter(pl.col("source").is_in(SOURCES_FOR_APPROVAL)).count())
         approved_indications = (
             indications.filter(pl.col("source").is_in(SOURCES_FOR_APPROVAL))
             .with_columns(
@@ -37,9 +39,11 @@ class DrugIndicationEvidenceDataset:
             .group_by("drug_id", "disease_id")
             .agg(pl.col("approval").unique().alias("approval"))
         )
-        return indications.join(
+        result = indications.join(
             approved_indications, on=["drug_id", "disease_id"], how="left"
         )
+        print(result.filter(pl.col("approval").is_not_null()).count())
+        return result
 
 
 class DrugIndicationDataset:
