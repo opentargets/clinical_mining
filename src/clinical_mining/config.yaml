@@ -23,14 +23,24 @@ db_properties:
 # Path Definitions for Local Datasets
 datasets:
   chembl_indications_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/inputs/chembl_drug_indication.jsonl # ???
-  disease_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/inputs/disease # null
-  molecule_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/inputs/drug_molecule # null
+  disease_index_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/inputs/disease # null
+  drug_index_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/inputs/drug_molecule # null
   output_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/outputs/clinical_trials # ???
 
 # Input Data Sources - Each key becomes the name of a DataFrame available to the pipeline steps.
 inputs:
+  chembl_indications_raw:
+    format: json
+    path: ${datasets.chembl_indications_path}
+  drug_index_spark:
+    format: parquet
+    path: ${datasets.drug_index_path}
+  disease_index_spark:
+    format: parquet
+    path: ${datasets.disease_index_path}
+
   studies:
-    type: db_table
+    format: db_table
     select_cols:
       - nct_id
       - overall_status
@@ -40,36 +50,32 @@ inputs:
       - why_stopped
       - number_of_arms
   interventions:
-    type: db_table
+    format: db_table
     select_cols:
       - nct_id
       - intervention_type
       - name
   conditions:
-    type: db_table
+    format: db_table
     select_cols:
       - nct_id
       - downcase_name
   study_references:
-    type: db_table
+    format: db_table
     select_cols:
       - nct_id
       - pmid
       - reference_type
   designs:
-    type: db_table
+    format: db_table
     select_cols:
       - nct_id
       - primary_purpose
   brief_summaries:
-    type: db_table
+    format: db_table
     select_cols:
       - nct_id
       - description
-  chembl_indications_raw:
-    type: file
-    format: json
-    path: ${datasets.chembl_indications_path}
 
 # =============================
 # PIPELINE DEFINITION
@@ -78,14 +84,6 @@ inputs:
 pipeline:
   # SETUP: Steps to prepare data needed by later stages (e.g., loading mapping tables).
   setup:
-    - name: molecule
-      function: clinical_mining.utils.mapping.process_molecule
-      parameters:
-        path: ${datasets.molecule_path}
-    - name: disease
-      function: clinical_mining.utils.mapping.process_disease
-      parameters:
-        path: ${datasets.disease_path}
     - name: chembl_curation
       function: clinical_mining.data_sources.chembl.curation.extract_chembl_ct_curation
       parameters:
@@ -130,26 +128,20 @@ pipeline:
         dfs: [$indications, $trials]
         join_on: studyId
         how: left
-    - name: trials_mapped_drug
-      function: clinical_mining.utils.mapping.assign_entity_id
+    - name: trials_mapped
+      function: clinical_mining.utils.mapping.map_entities
       parameters:
-        df: $indications_w_metadata
-        mapping_index: $molecule
+        spark: $spark_session
+        clinical_associations: $indications_w_metadata
+        disease_index: $disease_index_spark
+        drug_index: $drug_index_spark
         chembl_curation: $chembl_curation
-        entity_type: drug
-        verbose: false
-    - name: trials_mapped_drug_disease
-      function: clinical_mining.utils.mapping.assign_entity_id
-      parameters:
-        df: $trials_mapped_drug
-        mapping_index: $disease
-        chembl_curation: $chembl_curation
-        entity_type: disease
-        verbose: false
+        drug_column_name: drug_name
+        disease_column_name: disease_name
     - name: approval_assessment
       function: clinical_mining.dataset.DrugIndicationEvidenceDataset.assign_approval_status
       parameters:
-        indications: $trials_mapped_drug_disease
+        indications: $trials_mapped
     - name: final_df
       function: clinical_mining.dataset.DrugIndicationDataset.from_evidence
       parameters:

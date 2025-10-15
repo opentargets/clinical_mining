@@ -7,6 +7,7 @@ import polars as pl
 
 from clinical_mining.utils.pipeline import execute_step
 from clinical_mining.utils.db import construct_db_uri, load_db_table
+from clinical_mining.utils.spark_helpers import spark_session
 
 
 @hydra.main(
@@ -24,21 +25,27 @@ def main(cfg: DictConfig) -> pl.DataFrame:
         db_password=cfg.db_properties.aact.password,
     )
 
+
+    # Initialise spark one time only
+    data_store["spark_session"] = next((spark_session() for name in cfg.inputs if "spark" in name), None)
     # Load all data sources
     for name, source in cfg.inputs.items():
         print(f"Loading input: {name}")
-        if source.type == "db_table":
+        if source.format == "db_table":
             data_store[name] = load_db_table(
                 table_name=name,
                 db_url=aact_url,
                 select_cols=list(source.select_cols),
                 db_schema=cfg.db_properties.aact.schema,
             )
-        elif source.type == "file":
-            if source.format == "json":
-                data_store[name] = pl.read_ndjson(source.path)
-            else:
-                raise ValueError(f"Unsupported file format: {source.format}")
+        elif "spark" in name:
+            data_store[name] = data_store["spark_session"].read.load(source.path, format=source.format)
+        elif source.format == "parquet":
+            data_store[name] = pl.read_parquet(source.path)
+        elif source.format == "json":
+            data_store[name] = pl.read_ndjson(source.path)
+        else:
+            raise ValueError(f"unsupported file format: {source.format}")
 
     # Run pipeline sections
     for section in ["setup", "generate", "post_process"]:
