@@ -29,6 +29,8 @@ class DrugIndicationSource(str, Enum):
     INN = "INN"
     DailyMed = "DailyMed"
     FDA = "FDA"
+    EMA_Human_Drugs = "EMA Human Drugs"
+    TTD = "TTD"
 
 
 class ApprovalEvidence(BaseModel):
@@ -38,6 +40,8 @@ class ApprovalEvidence(BaseModel):
         FDA = "FDA"
         EMA = "EMA"
         DailyMed = "DailyMed"
+        TTD = "TTD"
+        EMA_Human_Drugs = "EMA Human Drugs"
 
     source: ApprovalSource
     date: str | None = Field(default=None, description="The approval date.")

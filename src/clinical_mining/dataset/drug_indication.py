@@ -23,9 +23,7 @@ class DrugIndicationEvidenceDataset:
         Args:
             indications: DataFrame with drug/indication relationships, some of which come from a regulatory agency.
         """
-        SOURCES_FOR_APPROVAL = ["FDA", "EMA", "DailyMed"]
-        print("APPROVAL FUNCTION")
-        print(indications.filter(pl.col("source").is_in(SOURCES_FOR_APPROVAL)).count())
+        SOURCES_FOR_APPROVAL = ["FDA", "EMA", "DailyMed", "EMA Human Drugs", "TTD"]
         approved_indications = (
             indications.filter(pl.col("source").is_in(SOURCES_FOR_APPROVAL))
             .with_columns(

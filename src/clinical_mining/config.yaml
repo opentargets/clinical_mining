@@ -25,6 +25,8 @@ datasets:
   chembl_indications_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/inputs/chembl_drug_indication.jsonl # ???
   disease_index_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/inputs/disease # null
   drug_index_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/inputs/drug_molecule # null
+  ttd_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/inputs/P1-05-Drug_disease.txt # null
+  ema_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/inputs/medicines-output-medicines-report_en.xlsx # null
   output_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/outputs/clinical_trials # ???
 
 # Input Data Sources - Each key becomes the name of a DataFrame available to the pipeline steps.
@@ -38,6 +40,9 @@ inputs:
   disease_index_spark:
     format: parquet
     path: ${datasets.disease_index_path}
+  chembl_curation:
+    format: parquet
+    path: /Users/irenelopez/EBI/repos/clinical_mining/data/outputs/chembl_indications/0910.parquet
 
   studies:
     format: db_table
@@ -84,17 +89,17 @@ inputs:
 pipeline:
   # SETUP: Steps to prepare data needed by later stages (e.g., loading mapping tables).
   setup:
-    - name: chembl_curation
-      function: clinical_mining.data_sources.chembl.curation.extract_chembl_ct_curation
-      parameters:
-        db_host: ${db_properties.chembl.host}
-        db_port: ${db_properties.chembl.port}
-        db_service: ${db_properties.chembl.service}
-        db_user: ${db_properties.chembl.user}
-        db_password: ${db_properties.chembl.password}
-        oracle_client_path: ${db_properties.chembl.oracle_client_path}
+    # - name: chembl_curation
+    #   function: clinical_mining.data_sources.chembl.curation.extract_chembl_ct_curation
+    #   parameters:
+    #     db_host: ${db_properties.chembl.host}
+    #     db_port: ${db_properties.chembl.port}
+    #     db_service: ${db_properties.chembl.service}
+    #     db_user: ${db_properties.chembl.user}
+    #     db_password: ${db_properties.chembl.password}
+    #     oracle_client_path: ${db_properties.chembl.oracle_client_path}
     - name: trials
-      function: clinical_mining.data_sources.aact.aact.extract_clinical_trials
+      function: clinical_mining.data_sources.aact.extract_clinical_trials
       parameters:
         studies: $studies
         additional_metadata: ['$study_references', '$designs', '$brief_summaries']
@@ -106,7 +111,7 @@ pipeline:
   # GENERATE: Steps that generate the core drug/indication DataFrames.
   generate:
     - name: aact_indications
-      function: clinical_mining.data_sources.aact.aact.extract_drug_indications
+      function: clinical_mining.data_sources.aact.extract_drug_indications
       parameters:
         interventions: $interventions
         conditions: $conditions
@@ -115,13 +120,21 @@ pipeline:
       parameters:
         raw_indications: $chembl_indications_raw
         exclude_trials: true
+    - name: ttd_indications
+      function: clinical_mining.data_sources.ttd.extract_ttd_indications
+      parameters:
+        indications_path: ${datasets.ttd_path}
+    - name: ema_indications
+      function: clinical_mining.data_sources.ema.extract_ema_indications
+      parameters:
+        indications_path: ${datasets.ema_path}
 
   # POST-PROCESS: Final transformation steps that run sequentially on the unified `indications` DataFrame.
   post_process:
     - name: indications
       function: clinical_mining.utils.polars_helpers.union_dfs
       parameters:
-        dfs: [$aact_indications, $chembl_indications]
+        dfs: [$aact_indications, $chembl_indications, $ttd_indications, $ema_indications]
     - name: indications_w_metadata
       function: clinical_mining.utils.polars_helpers.join_dfs
       parameters:
