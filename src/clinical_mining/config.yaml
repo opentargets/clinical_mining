@@ -40,9 +40,6 @@ inputs:
   disease_index_spark:
     format: parquet
     path: ${datasets.disease_index_path}
-  chembl_curation:
-    format: parquet
-    path: /Users/irenelopez/EBI/repos/clinical_mining/data/outputs/chembl_indications/0910.parquet
 
   studies:
     format: db_table
@@ -89,15 +86,15 @@ inputs:
 pipeline:
   # SETUP: Steps to prepare data needed by later stages (e.g., loading mapping tables).
   setup:
-    # - name: chembl_curation
-    #   function: clinical_mining.data_sources.chembl.curation.extract_chembl_ct_curation
-    #   parameters:
-    #     db_host: ${db_properties.chembl.host}
-    #     db_port: ${db_properties.chembl.port}
-    #     db_service: ${db_properties.chembl.service}
-    #     db_user: ${db_properties.chembl.user}
-    #     db_password: ${db_properties.chembl.password}
-    #     oracle_client_path: ${db_properties.chembl.oracle_client_path}
+    - name: chembl_curation
+      function: clinical_mining.data_sources.chembl.curation.extract_chembl_ct_curation
+      parameters:
+        db_host: ${db_properties.chembl.host}
+        db_port: ${db_properties.chembl.port}
+        db_service: ${db_properties.chembl.service}
+        db_user: ${db_properties.chembl.user}
+        db_password: ${db_properties.chembl.password}
+        oracle_client_path: ${db_properties.chembl.oracle_client_path}
     - name: trials
       function: clinical_mining.data_sources.aact.extract_clinical_trials
       parameters:

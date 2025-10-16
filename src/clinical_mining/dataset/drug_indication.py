@@ -40,7 +40,6 @@ class DrugIndicationEvidenceDataset:
         result = indications.join(
             approved_indications, on=["drug_id", "disease_id"], how="left"
         )
-        print(result.filter(pl.col("approval").is_not_null()).count())
         return result
 
 
