@@ -32,9 +32,11 @@ def process_conditions(
     Returns:
         pl.DataFrame: Conditions table with MeSH terms.
     """
-    return conditions.rename(
-        {"nct_id": "studyId", "downcase_name": "disease_name"}
-    ).unique()
+    return (
+        conditions.rename({"nct_id": "studyId", "downcase_name": "disease_name"})
+        .filter(~pl.col("disease_name").str.contains("healthy"))
+        .unique()
+    )
 
 
 def extract_clinical_trials(
