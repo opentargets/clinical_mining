@@ -138,21 +138,27 @@ pipeline:
         dfs: [$indications, $trials]
         join_on: studyId
         how: left
+    - name: indications_with_clinical_phase
+      function: clinical_mining.utils.polars_helpers.coalesce_column
+      parameters:
+        df: $indications_w_metadata
+        output_column_name: clinical_phase
+        input_column_names: ["phase", "phase_right"]
     - name: trials_mapped
       function: clinical_mining.utils.mapping.map_entities
       parameters:
         spark: $spark_session
-        clinical_associations: $indications_w_metadata
+        clinical_associations: $indications_with_clinical_phase
         disease_index: $disease_index_spark
         drug_index: $drug_index_spark
         chembl_curation: $chembl_curation
         drug_column_name: drug_name
         disease_column_name: disease_name
-    - name: approval_assessment
-      function: clinical_mining.dataset.DrugIndicationEvidenceDataset.assign_approval_status
-      parameters:
-        indications: $trials_mapped
-    - name: final_df
+    - name: aggregated_dataset
       function: clinical_mining.dataset.DrugIndicationDataset.from_evidence
       parameters:
-        evidence: $approval_assessment
+        evidence: $trials_mapped
+    - name: final_df
+      function: clinical_mining.dataset.DrugIndicationDataset.assign_clinical_status
+      parameters:
+        df: $aggregated_dataset
