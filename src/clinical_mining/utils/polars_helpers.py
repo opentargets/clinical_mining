@@ -1,6 +1,5 @@
 """Polars-specific helper functions for the pipeline."""
 
-
 import polars as pl
 from pyspark.sql import SparkSession, DataFrame
 
@@ -73,6 +72,15 @@ def join_dfs(dfs: list[pl.DataFrame], join_on: str, how: str = "inner") -> pl.Da
 
     joined_df = dfs[0]
     for i in range(1, len(dfs)):
-        joined_df = joined_df.join(dfs[i], on=join_on, how=how)
+        joined_df = joined_df.join(dfs[i], on=join_on, how=how, coalesce=True)
 
     return joined_df
+
+
+def coalesce_column(
+    df: pl.DataFrame, output_column_name: str, input_column_names: list[str]
+) -> pl.DataFrame:
+    """Coalesces multiple columns into a single column, filling missing values with null. Note that order of input columns is important."""
+    return df.with_columns(
+        pl.coalesce(*input_column_names).alias(output_column_name)
+    ).drop(input_column_names)

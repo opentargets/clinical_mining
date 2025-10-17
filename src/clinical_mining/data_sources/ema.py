@@ -20,7 +20,7 @@ def extract_ema_indications(
                 disease_name=pl.col("Therapeutic area (MeSH)")
                 .str.to_lowercase()
                 .str.split(";"),
-                overall_status=pl.col("Medicine status").str.to_lowercase(),
+                phase=pl.col("Medicine status").str.to_lowercase(),
                 studyId=pl.col("EMA product number").str.to_lowercase(),
                 source=pl.lit("EMA Human Drugs"),
             )

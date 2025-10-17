@@ -198,10 +198,12 @@ def map_entities(
             }
         )
         .with_columns(
-            pl.coalesce(pl.col(disease_id_column_name), pl.col(f"new_{disease_id_column_name}"))
-            .alias(disease_id_column_name),
-            pl.coalesce(pl.col(drug_id_column_name), pl.col(f"new_{drug_id_column_name}"))
-            .alias(drug_id_column_name),
-        )        
+            pl.coalesce(
+                pl.col(disease_id_column_name), pl.col(f"new_{disease_id_column_name}")
+            ).alias(disease_id_column_name),
+            pl.coalesce(
+                pl.col(drug_id_column_name), pl.col(f"new_{drug_id_column_name}")
+            ).alias(drug_id_column_name),
+        )
+        .drop(f"new_{disease_id_column_name}", f"new_{drug_id_column_name}")
     )
-

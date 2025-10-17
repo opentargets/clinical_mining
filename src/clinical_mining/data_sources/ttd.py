@@ -56,7 +56,7 @@ def extract_ttd_indications(
             .select(
                 drug_name=pl.col("drug_name").str.to_lowercase(),
                 disease_name=pl.col("disease_name").str.to_lowercase(),
-                overall_status=pl.col("clinical_status").str.to_lowercase(),
+                phase=pl.col("clinical_status").str.to_lowercase(),
                 studyId=pl.concat_str(
                     [pl.col("ttd_id"), pl.lit("/"), pl.col("disease_name")]
                 ).str.to_lowercase(),
