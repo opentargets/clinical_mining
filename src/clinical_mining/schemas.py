@@ -33,18 +33,20 @@ class DrugIndicationSource(str, Enum):
     TTD = "TTD"
 
 
-class ApprovalEvidence(BaseModel):
-    """Approval status from different sources."""
+class ClinicalStatusCategory(str, Enum):
+    """Standardized clinical development status categories, ranked by development stage."""
+    
+    APPROVED = "APPROVED"
+    POST_APPROVAL_WITHDRAWN = "POST_APPROVAL_WITHDRAWN"
+    REGULATORY_REVIEW = "REGULATORY_REVIEW"
+    PHASE_4 = "PHASE_4"
+    PHASE_3 = "PHASE_3"
+    PHASE_2 = "PHASE_2"
+    PHASE_1 = "PHASE_1"
+    PRECLINICAL = "PRECLINICAL"
+    NO_DEVELOPMENT_REPORTED = "NO_DEVELOPMENT_REPORTED"
 
-    class ApprovalSource(str, Enum):
-        FDA = "FDA"
-        EMA = "EMA"
-        DailyMed = "DailyMed"
-        TTD = "TTD"
-        EMA_Human_Drugs = "EMA Human Drugs"
 
-    source: ApprovalSource
-    date: str | None = Field(default=None, description="The approval date.")
 
 
 class ClinicalStudy(BaseModel):
@@ -84,14 +86,14 @@ class DrugIndicationEvidence(BaseModel):
     disease_id: str | None = Field(
         default=None, description="The EFO ID corresponding to the disease."
     )
-    approval: list[ApprovalEvidence] | None = Field(
+    clinical_status: ClinicalStatusCategory | None = Field(
         default=None,
-        description="The approval status of the drug/indication relationship.",
+        description="The maximum clinical development status (MCDS) of the drug/indication relationship.",
     )
 
 
 class DrugIndication(BaseModel):
-    """Represents a single piece of evidence linking a drug to an indication from a source."""
+    """Aggregated drug-indication relationship with multiple supporting sources."""
 
     model_config = ConfigDict(extra="allow")
 
@@ -108,7 +110,9 @@ class DrugIndication(BaseModel):
         ...,
         description="List of studies and their metadata that supports the association.",
     )
-    approval: list[ApprovalEvidence] | None = Field(
+    clinical_status: ClinicalStatusCategory | None = Field(
         default=None,
-        description="The approval status of the drug/indication relationship.",
+        description="The maximum clinical development status (MCDS) of the drug/indication relationship.",
     )
+
+
