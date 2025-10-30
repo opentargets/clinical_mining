@@ -47,12 +47,6 @@ class ClinicalStatusCategory(str, Enum):
     NO_DEVELOPMENT_REPORTED = "NO_DEVELOPMENT_REPORTED"
 
 
-class ClinicalStatus(BaseModel):
-    """Clinical development status with harmonized categorization."""
-
-    category: ClinicalStatusCategory = Field(..., description="Harmonised clinical status category.")
-    phase: str | None = Field(default=None, description="Original phase value from source.")
-    source: DrugIndicationSource = Field(..., description="Data source of the clinical status.")
 
 
 class ClinicalStudy(BaseModel):
@@ -92,14 +86,14 @@ class DrugIndicationEvidence(BaseModel):
     disease_id: str | None = Field(
         default=None, description="The EFO ID corresponding to the disease."
     )
-    clinical_status: ClinicalStatus | None = Field(
+    clinical_status: ClinicalStatusCategory | None = Field(
         default=None,
-        description="The clinical development status of the drug/indication relationship.",
+        description="The maximum clinical development status (MCDS) of the drug/indication relationship.",
     )
 
 
 class DrugIndication(BaseModel):
-    """Represents a single piece of evidence linking a drug to an indication from a source."""
+    """Aggregated drug-indication relationship with multiple supporting sources."""
 
     model_config = ConfigDict(extra="allow")
 
@@ -116,7 +110,9 @@ class DrugIndication(BaseModel):
         ...,
         description="List of studies and their metadata that supports the association.",
     )
-    clinical_status: ClinicalStatus | None = Field(
+    clinical_status: ClinicalStatusCategory | None = Field(
         default=None,
-        description="The clinical development status of the drug/indication relationship.",
+        description="The maximum clinical development status (MCDS) of the drug/indication relationship.",
     )
+
+

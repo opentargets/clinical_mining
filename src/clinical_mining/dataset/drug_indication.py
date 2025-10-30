@@ -5,9 +5,7 @@ from clinical_mining.schemas import (
     DrugIndicationEvidence,
     DrugIndication,
     ClinicalStatusCategory,
-    ClinicalStatus,
 )
-
 
 # Clinical status harmonization constants
 PHASE_TO_CATEGORY_MAP = {
@@ -188,68 +186,46 @@ class DrugIndicationDataset:
         )
     
     @staticmethod
-    def assign_clinical_status(df: pl.DataFrame) -> "DrugIndicationDataset":
-        """Assign harmonized clinical status using Maximum Clinical Development Status logic.
+    def assign_clinical_status(dataset: "DrugIndicationDataset") -> "DrugIndicationDataset":
+        """Assign harmonized clinical status using Maximum Clinical Development Status (MCDS) logic.
         
         For each drug-indication pair, determines the highest-ranked clinical status
-        across all supporting sources based on the harmonisation categories.
+        across all supporting sources based on the harmonization categories.
         
         Returns:
-            DrugIndicationDataset with clinical_status field added
+            DrugIndicationDataset with clinical_status field added containing the MCDS category
         """
-        def get_max_clinical_status(sources_list) -> dict:
-            """Get the maximum clinical development status from a list of sources."""
+        def get_max_clinical_status(sources_list) -> str:
+            """Get the maximum clinical development status category from a list of sources."""
             # Convert Polars list to Python list if needed
             if hasattr(sources_list, 'to_list'):
                 sources_list = sources_list.to_list()
             
-            if not sources_list or len(sources_list) == 0:
-                return {
-                    "category": ClinicalStatusCategory.NO_DEVELOPMENT_REPORTED.value,
-                    "phase": None,
-                    "source": None
-                }
+            # Extract all clinical statuses from sources and find the best rank
+            best_rank = CATEGORY_RANKS[ClinicalStatusCategory.NO_DEVELOPMENT_REPORTED]
+            best_category = ClinicalStatusCategory.NO_DEVELOPMENT_REPORTED
             
-            # Extract all clinical statuses from sources
-            clinical_statuses = []
             for source in sources_list:
-                phase = source.get("clinical_phase") or source.get("phase")
+                phase = source.get("clinical_phase")
                 source_name = source.get("source")
                 
                 if source_name:
                     category = map_phase_to_category(phase, source_name)
-                    clinical_statuses.append({
-                        "category": category.value,
-                        "phase": phase,
-                        "source": source_name,
-                        "rank": CATEGORY_RANKS[category]
-                    })
+                    rank = CATEGORY_RANKS[category]
+                    
+                    # Lower rank number = higher priority
+                    if rank < best_rank:
+                        best_rank = rank
+                        best_category = category
             
-            if not clinical_statuses:
-                return {
-                    "category": ClinicalStatusCategory.NO_DEVELOPMENT_REPORTED.value,
-                    "phase": None,
-                    "source": None
-                }
-            
-            # Sort by rank (lower number = higher priority) and return the best one
-            best_status = min(clinical_statuses, key=lambda x: x["rank"])
-            return {
-                "category": best_status["category"],
-                "phase": best_status["phase"],
-                "source": best_status["source"]
-            }
+            return best_category.value
         
         # Apply MCDS logic to each drug-indication pair
-        df_with_status = df.with_columns([
+        df_with_status = dataset.df.with_columns([
             pl.col("sources")
             .map_elements(
                 get_max_clinical_status,
-                return_dtype=pl.Struct([
-                    pl.Field("category", pl.String),
-                    pl.Field("phase", pl.String),
-                    pl.Field("source", pl.String)
-                ])
+                return_dtype=pl.String
             )
             .alias("clinical_status")
         ])
