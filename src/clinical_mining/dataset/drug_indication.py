@@ -133,7 +133,6 @@ class DrugIndicationEvidenceDataset:
         self.df = validate_schema(df, DrugIndicationEvidence)
 
 
-
 class DrugIndicationDataset:
     """A dataset for drug-indication relationships, wrapping a Polars DataFrame."""
 
