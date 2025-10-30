@@ -28,7 +28,7 @@ dev = []
 packages = ["src/clinical_mining"]
 
 [tool.uv.sources]
-ontoma = { git = "https://github.com/opentargets/OnToma", rev = "il-spark-4" }
+ontoma = { git = "https://github.com/opentargets/OnToma", rev = "il-nlp" }
 
 [build-system]
 requires = ["hatchling"]
