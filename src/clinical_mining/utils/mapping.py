@@ -6,6 +6,8 @@ from ontoma import OnToma, OpenTargetsDisease, OpenTargetsDrug
 from ontoma.dataset.raw_entity_lut import RawEntityLUT
 from ontoma.ner.drug import extract_drug_entities
 from clinical_mining.utils.polars_helpers import convert_polars_to_spark
+from datetime import datetime
+from pathlib import Path
 
 
 def _create_curation_lut(
@@ -102,6 +104,7 @@ def map_entities(
     disease_id_column_name: str = "disease_id",
     ner_extract_drug: bool = True,
     ner_batch_size: int = 256,
+    ner_cache_path: str = f".cache/ner/{datetime.now().strftime('%Y%m%d')}.parquet",
 ) -> DataFrame:
     """Map drug and disease entities to their standardized IDs using OnToma.
 
@@ -123,6 +126,7 @@ def map_entities(
         disease_id_column_name: Name for output disease ID column
         ner_extract_drug: If True, apply NER to unmapped drug labels (default: True)
         ner_batch_size: Batch size for NER extraction (default: 256)
+        ner_cache_path: Path to parquet file for caching NER results (default: .cache/ner/{datetime.now().strftime('%Y%m%d')}.parquet)
 
     Returns:
         Polars DataFrame with added drug and disease ID columns
@@ -148,10 +152,7 @@ def map_entities(
     # Prepare unified query DataFrame
     query_df = _prepare_unified_query_df(
         associations_spark, drug_column_name, disease_column_name
-    )
-
-    # Optimize partitioning to prevent large tasks
-    query_df = query_df.repartition(100, "entity_type")
+    ).repartition(50, "entity_type")
 
     # STEP 1: Dictionary mapping (curation + indices)
     # This maps ~50% of drugs and diseases
@@ -188,20 +189,33 @@ def map_entities(
         if unmapped_count > 0:
             print(f"apply ner to {unmapped_count} unmapped drug labels...")
 
-            # Extract clean entities using NER
+            # Simple caching: try to load, else extract and save
+            if ner_cache_path:
+                cache_file = Path(ner_cache_path)
+                if cache_file.exists():
+                    print(f"load ner from cache: {cache_file}")
+                    ner_extracted_raw = spark.read.parquet(str(cache_file))
+
+                # Run NER if not cached
+                else:
+                    ner_extracted_raw = extract_drug_entities(
+                        spark=spark,
+                        df=unmapped_drugs,
+                        input_col="query_label",
+                        output_col="extracted_drugs",
+                        use_regex=True,
+                        use_biobert=True,
+                        use_drugtemist=True,
+                        batch_size=ner_batch_size,
+                    )
+
+                    cache_file.parent.mkdir(parents=True, exist_ok=True)
+                    print(f"save ner to cache: {cache_file}")
+                    ner_extracted_raw.write.toPandas().to_parquet(str(cache_file))
+
+            # Explode extracted drugs
             ner_extracted = (
-                extract_drug_entities(
-                    spark=spark,
-                    df=unmapped_drugs,
-                    input_col="query_label",
-                    output_col="extracted_drugs",
-                    use_regex=True,
-                    use_biobert=True,
-                    use_drugtemist=True,
-                    batch_size=ner_batch_size,
-                )
-                # Explode arrays: one row per extracted drug
-                .filter(f.size("extracted_drugs") > 0)
+                ner_extracted_raw.filter(f.size("extracted_drugs") > 0)
                 .select(
                     f.col("query_label"),
                     f.explode("extracted_drugs").alias("clean_label"),
@@ -209,11 +223,8 @@ def map_entities(
             )
 
             # Map the cleaned labels with new OnToma instance (faster and safer for clean drug names)
-            ontoma = OnToma(
-                spark=spark,
-                entity_lut_list=[drug_label_lut],
-            )
-            ner_mapped = ontoma.map_entities(
+            ontoma_clean = OnToma(spark=spark, entity_lut_list=[drug_label_lut])
+            ner_mapped = ontoma_clean.map_entities(
                 df=ner_extracted,
                 result_col_name="mapped_ids",
                 entity_col_name="clean_label",
@@ -234,21 +245,17 @@ def map_entities(
                 )
             )
 
-            # Merge NER results: use NER mappings for previously unmapped drugs
+            # Merge: prefer dictionary, fallback to NER
             mapped_df = (
                 mapped_df.alias("dict")
                 .join(
-                    ner_aggregated.select(
-                        f.col("query_label"),
-                        f.col("ner_mapped_ids"),
-                    ).alias("ner"),
+                    ner_aggregated.select("query_label", "ner_mapped_ids").alias("ner"),
                     on="query_label",
                     how="left",
                 )
                 .select(
                     f.col("dict.query_label"),
                     f.col("dict.entity_type"),
-                    # Prefer dictionary mapping, use NER as fallback
                     f.when(
                         f.col("dict.mapped_ids").isNotNull()
                         & (f.size("dict.mapped_ids") > 0),
@@ -260,14 +267,11 @@ def map_entities(
             )
 
             recovered = ner_aggregated.count()
-            print(
-                f"ner recovered mappings for {recovered} drug labels ({recovered / unmapped_count * 100:.1f}% of unmapped)"
-            )
+            print(f"ner recovered {recovered}/{unmapped_count} ({recovered / unmapped_count * 100:.1f}%)")
 
-    # Process final mapping results
+    # Convert to Polars and join back
     polars_mapped_df = _process_mapping_results(mapped_df)
 
-    # Join mapped IDs back to original associations
     return (
         clinical_associations.join(
             # Add mapped disease IDs

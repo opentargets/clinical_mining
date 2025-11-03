@@ -48,7 +48,7 @@ inputs:
       - overall_status
       - phase
       - study_type
-      - completion_date
+      - start_date
       - why_stopped
       - number_of_arms
   interventions:
@@ -73,11 +73,25 @@ inputs:
     select_cols:
       - nct_id
       - primary_purpose
-  brief_summaries:
-    format: db_table
-    select_cols:
-      - nct_id
-      - description
+  # brief_summaries:
+  #   format: db_table
+  #   select_cols:
+  #     - nct_id
+  #     - description
+  # countries:
+  #   format: db_table
+  #   select_cols:
+  #     - nct_id
+  #     - name
+  # baseline_measurements:
+  #   format: db_table
+  #   select_cols:
+  #     - nct_id
+  #     - category
+  #     - title
+  #     - param_value
+
+  
 
 # =============================
 # PIPELINE DEFINITION
@@ -99,7 +113,7 @@ pipeline:
       function: clinical_mining.data_sources.aact.extract_clinical_trials
       parameters:
         studies: $studies
-        additional_metadata: ['$study_references', '$designs', '$brief_summaries']
+        additional_metadata: ['$study_references', '$designs']
         aggregation_specs: 
           pmid: 
             group_by: nct_id
@@ -154,6 +168,7 @@ pipeline:
         chembl_curation: $chembl_curation
         drug_column_name: drug_name
         disease_column_name: disease_name
+        ner_cache_path: ".cache/clinical_mining/ner/893f9950b11c218ebbe037d1f0bee7d00579ced218be6c85a752f3362393ec43.parquet"
     - name: aggregated_dataset
       function: clinical_mining.dataset.DrugIndicationDataset.from_evidence
       parameters:
