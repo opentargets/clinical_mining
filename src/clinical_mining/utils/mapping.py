@@ -187,17 +187,46 @@ def map_entities(
 
         unmapped_count = unmapped_drugs.count()
         if unmapped_count > 0:
-            print(f"apply ner to {unmapped_count} unmapped drug labels...")
-
-            # Simple caching: try to load, else extract and save
+            print(f"found {unmapped_count} unmapped drug labels...")
             if ner_cache_path:
                 cache_file = Path(ner_cache_path)
+                
+                # Load existing cache if it exists
                 if cache_file.exists():
-                    print(f"load ner from cache: {cache_file}")
-                    ner_extracted_raw = spark.read.parquet(str(cache_file))
-
-                # Run NER if not cached
+                    print(f"loading ner cache from: {cache_file}")
+                    cached_ner = spark.read.parquet(str(cache_file))
+                    cached_labels = cached_ner.select("query_label").distinct()
+                    
+                    # Find new labels not in cache
+                    new_labels = unmapped_drugs.join(
+                        cached_labels, on="query_label", how="left_anti"
+                    )
+                    new_count = new_labels.count()
+                    
+                    if new_count > 0:
+                        print(f"applying ner to {new_count} new drug labels (using cache for {unmapped_count - new_count})...")
+                        new_ner_results = extract_drug_entities(
+                            spark=spark,
+                            df=new_labels,
+                            input_col="query_label",
+                            output_col="extracted_drugs",
+                            use_regex=True,
+                            use_biobert=True,
+                            use_drugtemist=True,
+                            batch_size=ner_batch_size,
+                        )
+                        
+                        # Update cache with merged results
+                        print(f"updating cache: {cache_file}")
+                        ner_extracted_raw = cached_ner.union(new_ner_results)
+                        ner_extracted_raw.toPandas().to_parquet(str(cache_file))
+                    else:
+                        print(f"all {unmapped_count} labels found in cache, skipping ner extraction")
+                        ner_extracted_raw = cached_ner
+                
+                # Run NER on all labels if no cache exists
                 else:
+                    print(f"no cache found, applying ner to all {unmapped_count} drug labels...")
                     ner_extracted_raw = extract_drug_entities(
                         spark=spark,
                         df=unmapped_drugs,
@@ -210,8 +239,8 @@ def map_entities(
                     )
 
                     cache_file.parent.mkdir(parents=True, exist_ok=True)
-                    print(f"save ner to cache: {cache_file}")
-                    ner_extracted_raw.write.toPandas().to_parquet(str(cache_file))
+                    print(f"saving ner cache to: {cache_file}")
+                    ner_extracted_raw.toPandas().to_parquet(str(cache_file))
 
             # Explode extracted drugs
             ner_extracted = (

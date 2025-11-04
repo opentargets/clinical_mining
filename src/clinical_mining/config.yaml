@@ -168,7 +168,7 @@ pipeline:
         chembl_curation: $chembl_curation
         drug_column_name: drug_name
         disease_column_name: disease_name
-        ner_cache_path: ".cache/clinical_mining/ner/893f9950b11c218ebbe037d1f0bee7d00579ced218be6c85a752f3362393ec43.parquet"
+        ner_cache_path: ".cache/ner/2025-11-03.parquet"
     - name: aggregated_dataset
       function: clinical_mining.dataset.DrugIndicationDataset.from_evidence
       parameters:
