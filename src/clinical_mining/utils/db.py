@@ -1,3 +1,4 @@
+from loguru import logger
 import polars as pl
 
 
@@ -67,7 +68,7 @@ def load_db_table(
 
 def print_table_schema(table_name: str, db_uri: str, db_schema: str) -> None:
     """Get schema for a table"""
-    print(load_db_table(table_name, db_uri, db_schema, limit=1).schema)
+    logger.info(load_db_table(table_name, db_uri, db_schema, limit=1).schema)
 
 
 # --- Oracle utilities -------------------------------------------------------

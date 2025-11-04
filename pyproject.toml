@@ -10,6 +10,7 @@ dependencies = [
     "fastexcel>=0.16.0",
     "hydra-core>=1.3.2",
     "ipykernel>=6.29.5",
+    "loguru>=0.7.3",
     "ontoma",
     "pandas>=2.3.3",
     "polars>=1.34.0",
