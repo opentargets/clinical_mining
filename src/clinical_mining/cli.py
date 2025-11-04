@@ -2,6 +2,7 @@ from datetime import datetime
 from pathlib import Path
 
 import hydra
+from loguru import logger
 from omegaconf import DictConfig
 import polars as pl
 
@@ -30,7 +31,7 @@ def main(cfg: DictConfig) -> pl.DataFrame:
     data_store["spark_session"] = next((spark_session() for name in cfg.inputs if "spark" in name), None)
     # Load all data sources
     for name, source in cfg.inputs.items():
-        print(f"Loading input: {name}")
+        logger.info(f"Loading input: {name}")
         if source.format == "db_table":
             data_store[name] = load_db_table(
                 table_name=name,
@@ -49,9 +50,9 @@ def main(cfg: DictConfig) -> pl.DataFrame:
 
     # Run pipeline sections
     for section in ["setup", "generate", "post_process"]:
-        print(f"\n----- Running {section.upper()} section -----")
+        logger.info(f"\n----- Running {section.upper()} section -----")
         for step in cfg.pipeline.get(section, []):
-            print(f"Executing step: {step.name}")
+            logger.info(f"Executing step: {step.name}")
             execute_step(step, data_store)
 
     # Write the final output
@@ -62,7 +63,7 @@ def main(cfg: DictConfig) -> pl.DataFrame:
     final_df = data_store["final_df"].unique()
     final_df.write_parquet(output_dir / "df.parquet")
 
-    print(f"Output written to {output_dir}")
+    logger.info(f"Output written to {output_dir}")
 
     return final_df
 
