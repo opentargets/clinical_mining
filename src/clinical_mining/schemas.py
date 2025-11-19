@@ -33,7 +33,7 @@ class DrugIndicationSource(str, Enum):
     TTD = "TTD"
 
 
-class ClinicalStatusCategory(str, Enum):
+class MaxClinicalStatusCategory(str, Enum):
     """Standardized clinical development status categories, ranked by development stage."""
     
     APPROVED = "APPROVED"
@@ -121,7 +121,7 @@ class DrugIndication(BaseModel):
         ...,
         description="List of studies and their metadata that supports the association.",
     )
-    clinical_status: ClinicalStatusCategory | None = Field(
+    max_clinical_status: MaxClinicalStatusCategory | None = Field(
         default=None,
         description="The maximum clinical development status (MCDS) of the drug/indication relationship.",
     )

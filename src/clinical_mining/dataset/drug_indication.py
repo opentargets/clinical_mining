@@ -207,7 +207,7 @@ class DrugIndicationDataset:
         )
 
     @staticmethod
-    def assign_clinical_status(df: pl.DataFrame) -> "DrugIndicationDataset":
+    def assign_max_clinical_status(df: pl.DataFrame) -> "DrugIndicationDataset":
         """Assign harmonized clinical status using Maximum Clinical Development Status (MCDS) logic.
 
         For each drug-indication pair, determines the highest-ranked clinical status
@@ -247,7 +247,7 @@ class DrugIndicationDataset:
             [
                 pl.col("sources")
                 .map_elements(get_max_clinical_status, return_dtype=pl.String)
-                .alias("clinical_status")
+                .alias("max_clinical_status")
             ]
         )
 
