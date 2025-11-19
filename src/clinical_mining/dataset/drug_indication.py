@@ -1,4 +1,5 @@
 import polars as pl
+import polars_hash as plh
 
 from clinical_mining.schemas import (
     validate_schema,
@@ -16,7 +17,6 @@ PHASE_TO_CATEGORY_MAP = {
     "approved in china": ClinicalStatusCategory.APPROVED,
     "approved in eu": ClinicalStatusCategory.APPROVED,
     "opinion": ClinicalStatusCategory.APPROVED,
-    
     # POST_APPROVAL_WITHDRAWN (Rank 2)
     "withdrawn": ClinicalStatusCategory.POST_APPROVAL_WITHDRAWN,
     "withdrawn from market": ClinicalStatusCategory.POST_APPROVAL_WITHDRAWN,
@@ -24,7 +24,6 @@ PHASE_TO_CATEGORY_MAP = {
     "expired": ClinicalStatusCategory.POST_APPROVAL_WITHDRAWN,
     "lapsed": ClinicalStatusCategory.POST_APPROVAL_WITHDRAWN,
     "suspended": ClinicalStatusCategory.POST_APPROVAL_WITHDRAWN,
-    
     # REGULATORY_REVIEW (Rank 3)
     "application submitted": ClinicalStatusCategory.REGULATORY_REVIEW,
     "approval submitted": ClinicalStatusCategory.REGULATORY_REVIEW,
@@ -32,12 +31,10 @@ PHASE_TO_CATEGORY_MAP = {
     "bla submitted": ClinicalStatusCategory.REGULATORY_REVIEW,
     "ind submitted": ClinicalStatusCategory.REGULATORY_REVIEW,
     "opinion under re-examination": ClinicalStatusCategory.REGULATORY_REVIEW,
-    
     # PHASE_4 (Rank 4)
     "phase4": ClinicalStatusCategory.PHASE_4,
     "phase 4": ClinicalStatusCategory.PHASE_4,
     "discontinued in phase 4": ClinicalStatusCategory.PHASE_4,
-    
     # PHASE_3 (Rank 5)
     "phase3": ClinicalStatusCategory.PHASE_3,
     "phase 3": ClinicalStatusCategory.PHASE_3,
@@ -45,7 +42,6 @@ PHASE_TO_CATEGORY_MAP = {
     "phase 2/3": ClinicalStatusCategory.PHASE_3,
     "discontinued in phase 3": ClinicalStatusCategory.PHASE_3,
     "discontinued in phase 2/3": ClinicalStatusCategory.PHASE_3,
-    
     # PHASE_2 (Rank 6)
     "phase2": ClinicalStatusCategory.PHASE_2,
     "phase 2": ClinicalStatusCategory.PHASE_2,
@@ -59,7 +55,6 @@ PHASE_TO_CATEGORY_MAP = {
     "discontinued in phase 1/2": ClinicalStatusCategory.PHASE_2,
     "discontinued in phase 2a": ClinicalStatusCategory.PHASE_2,
     "discontinued in phase 2b": ClinicalStatusCategory.PHASE_2,
-    
     # PHASE_1 (Rank 7)
     "phase1": ClinicalStatusCategory.PHASE_1,
     "phase 1": ClinicalStatusCategory.PHASE_1,
@@ -67,11 +62,9 @@ PHASE_TO_CATEGORY_MAP = {
     "early_phase1": ClinicalStatusCategory.PHASE_1,
     "phase 0": ClinicalStatusCategory.PHASE_1,
     "discontinued in phase 1": ClinicalStatusCategory.PHASE_1,
-    
     # PRECLINICAL (Rank 8)
     "preclinical": ClinicalStatusCategory.PRECLINICAL,
     "patented": ClinicalStatusCategory.PRECLINICAL,
-    
     # NO_DEVELOPMENT_REPORTED (Rank 9)
     "investigative": ClinicalStatusCategory.NO_DEVELOPMENT_REPORTED,
     "clinical trial": ClinicalStatusCategory.NO_DEVELOPMENT_REPORTED,
@@ -104,11 +97,11 @@ APPROVED_SOURCES = {"ATC", "EMA", "FDA", "DailyMed"}
 
 def map_phase_to_category(phase: str | None, source: str) -> ClinicalStatusCategory:
     """Map original phase value to standardised category.
-    
+
     Args:
         phase: Original phase value (can be null)
         source: Data source name
-        
+
     Returns:
         Standardised clinical status category
     """
@@ -118,11 +111,13 @@ def map_phase_to_category(phase: str | None, source: str) -> ClinicalStatusCateg
             return ClinicalStatusCategory.APPROVED
         else:
             return ClinicalStatusCategory.NO_DEVELOPMENT_REPORTED
-    
+
     # Handle case-insensitive mapping
     phase_lower = phase.lower() if isinstance(phase, str) else str(phase).lower()
-    
-    return PHASE_TO_CATEGORY_MAP.get(phase_lower, ClinicalStatusCategory.NO_DEVELOPMENT_REPORTED)
+
+    return PHASE_TO_CATEGORY_MAP.get(
+        phase_lower, ClinicalStatusCategory.NO_DEVELOPMENT_REPORTED
+    )
 
 
 class DrugIndicationEvidenceDataset:
@@ -137,10 +132,11 @@ class DrugIndicationDataset:
     """A dataset for drug-indication relationships, wrapping a Polars DataFrame."""
 
     AGGREGATION_FIELDS = {
+        "id",
         "drug_id",
         "disease_id",
-        "drug_name",
-        "disease_name",
+        "primary_drug_name",
+        "primary_disease_name",
     }
 
     def __init__(self, df: pl.DataFrame):
@@ -162,11 +158,37 @@ class DrugIndicationDataset:
 
         agg_df = (
             evidence.with_columns(
-                study_info=pl.struct([pl.col(c) for c in study_metadata_cols])
+                primary_drug_name=pl.coalesce("drug_id", "drug_name"),
+                primary_disease_name=pl.coalesce("disease_id", "disease_name"),
+                study_info=pl.struct([pl.col(c) for c in study_metadata_cols]),
+            )
+            .with_columns(
+                # Create hash to use as primary key
+                id=plh.concat_str(
+                    "primary_drug_name", "primary_disease_name"
+                ).chash.sha2_256()
             )
             .group_by(list(cls.AGGREGATION_FIELDS))
             .agg(
                 pl.col("study_info").unique().alias("sources"),
+            )
+            .with_columns(
+                mapping_status=pl.when(
+                    (pl.col("drug_id").is_not_null())
+                    & (pl.col("disease_id").is_not_null())
+                )
+                .then(pl.lit("FULLY_MAPPED"))
+                .when(
+                    (pl.col("drug_id").is_not_null())
+                    & (pl.col("disease_id").is_null())
+                )
+                .then(pl.lit("DRUG_MAPPED"))
+                .when(
+                    (pl.col("drug_id").is_null())
+                    & (pl.col("disease_id").is_not_null())
+                )
+                .then(pl.lit("DISEASE_MAPPED"))
+                .otherwise(pl.lit("UNMAPPED"))
             )
         )
         return cls(df=agg_df)
@@ -183,50 +205,50 @@ class DrugIndicationDataset:
             .filter(pl.col("studyIds").list.contains(studyId))
             .drop("studyIds")
         )
-    
+
     @staticmethod
     def assign_clinical_status(df: pl.DataFrame) -> "DrugIndicationDataset":
         """Assign harmonized clinical status using Maximum Clinical Development Status (MCDS) logic.
-        
+
         For each drug-indication pair, determines the highest-ranked clinical status
         across all supporting sources based on the harmonization categories.
-        
+
         Returns:
             DrugIndicationDataset with clinical_status field added containing the MCDS category
         """
+
         def get_max_clinical_status(sources_list) -> str:
             """Get the maximum clinical development status category from a list of sources."""
             # Convert Polars list to Python list if needed
-            if hasattr(sources_list, 'to_list'):
+            if hasattr(sources_list, "to_list"):
                 sources_list = sources_list.to_list()
-            
+
             # Extract all clinical statuses from sources and find the best rank
             best_rank = CATEGORY_RANKS[ClinicalStatusCategory.NO_DEVELOPMENT_REPORTED]
             best_category = ClinicalStatusCategory.NO_DEVELOPMENT_REPORTED
-            
+
             for source in sources_list:
                 phase = source.get("clinical_phase")
                 source_name = source.get("source")
-                
+
                 if source_name:
                     category = map_phase_to_category(phase, source_name)
                     rank = CATEGORY_RANKS[category]
-                    
+
                     # Lower rank number = higher priority
                     if rank < best_rank:
                         best_rank = rank
                         best_category = category
-            
+
             return best_category.value
-        
+
         # Apply MCDS logic to each drug-indication pair
-        df_with_status = df.with_columns([
-            pl.col("sources")
-            .map_elements(
-                get_max_clinical_status,
-                return_dtype=pl.String
-            )
-            .alias("clinical_status")
-        ])
-        
+        df_with_status = df.with_columns(
+            [
+                pl.col("sources")
+                .map_elements(get_max_clinical_status, return_dtype=pl.String)
+                .alias("clinical_status")
+            ]
+        )
+
         return DrugIndicationDataset(df=df_with_status)

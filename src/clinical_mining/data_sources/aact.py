@@ -14,9 +14,10 @@ def process_interventions(interventions: pl.DataFrame) -> pl.DataFrame:
     """
     INTERVENTION_WHITELIST = ["DRUG", "COMBINATION_PRODUCT", "BIOLOGICAL"]
     return (
-        interventions.filter(pl.col("intervention_type").is_in(INTERVENTION_WHITELIST))
-        .filter(~pl.col("name").str.to_lowercase().str.starts_with("placebo"))
-        .rename({"nct_id": "studyId", "name": "drug_name"})
+        interventions.with_columns(drug_name=pl.col("name").str.to_lowercase())
+        .filter(pl.col("intervention_type").is_in(INTERVENTION_WHITELIST))
+        .filter(~pl.col("drug_name").str.starts_with("placebo"))
+        .rename({"nct_id": "studyId"})
         .unique()
     )
 
@@ -33,8 +34,9 @@ def process_conditions(
         pl.DataFrame: Conditions table with MeSH terms.
     """
     return (
-        conditions.rename({"nct_id": "studyId", "downcase_name": "disease_name"})
+        conditions.with_columns(disease_name=pl.col("downcase_name").str.to_lowercase())
         .filter(~pl.col("disease_name").str.contains("healthy"))
+        .rename({"nct_id": "studyId"})
         .unique()
     )
 
