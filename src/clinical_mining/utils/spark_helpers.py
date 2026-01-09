@@ -1,7 +1,7 @@
 from pyspark.sql import SparkSession
 from pyspark.conf import SparkConf
 
-def spark_session():
+def spark_session() -> SparkSession:
     """OnToma works on Spark dataframes."""
     try:
         SparkSession.getActiveSession().stop()

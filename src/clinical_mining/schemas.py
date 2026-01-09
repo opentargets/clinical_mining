@@ -31,6 +31,7 @@ class DrugIndicationSource(str, Enum):
     FDA = "FDA"
     EMA_Human_Drugs = "EMA Human Drugs"
     TTD = "TTD"
+    PMDA = "PMDA"
 
 
 class MaxClinicalStatusCategory(str, Enum):
@@ -73,12 +74,11 @@ class DrugIndicationEvidence(BaseModel):
 
     model_config = ConfigDict(extra="allow")
 
-    studyId: str = Field(
-        ...,
-        description="The study identifier that supports the drug/indication relationship.",
-    )
     source: DrugIndicationSource = Field(
         ..., description="The data source of the evidence."
+    )
+    studyId: str | None = Field(
+        default=None, description="The study identifier that supports the drug/indication relationship.",
     )
     drug_name: str | None = Field(
         default=None, description="The name of the drug.")

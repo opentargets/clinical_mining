@@ -33,6 +33,10 @@ This project provides tools to fetch, process, and annotate clinical trial data 
 
    The private DRUGBASE_CURATION database in ChEMBL stores metadata related to clinical trials. After processing data from ClinicalTrials.gov, their internal pipeline automatically assigns an EFO ID to each condition and a ChEMBL ID to each intervention mentioned in the trials. This database is used to map the conditions and interventions in the AACT database to ChEMBL and EFO IDs, and it **requires a valid ChEMBL user account** to access.
 
+4. **PMDA Database**
+
+   The PMDA (Pharmaceuticals and Medical Devices Agency) is the Japanese regulatory agency. We use their PDF of approved products to extract drug/disease associations. The PDF can be downloaded from their site: https://www.pmda.go.jp/english/review-services/reviews/approved-information/drugs/0002.html
+
 ## Usage
 
 ### 1. Configure Your Environment

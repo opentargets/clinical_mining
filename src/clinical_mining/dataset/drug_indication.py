@@ -92,7 +92,7 @@ CATEGORY_RANKS = {
 }
 
 # Sources that indicate approved status when phase is null
-APPROVED_SOURCES = {"ATC", "EMA", "FDA", "DailyMed"}
+APPROVED_SOURCES = {"ATC", "EMA", "FDA", "DailyMed", "PMDA"}
 
 
 def map_phase_to_category(phase: str | None, source: str) -> MaxClinicalStatusCategory:
