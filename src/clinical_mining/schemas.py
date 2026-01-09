@@ -33,7 +33,7 @@ class DrugIndicationSource(str, Enum):
     TTD = "TTD"
 
 
-class ClinicalStatusCategory(str, Enum):
+class MaxClinicalStatusCategory(str, Enum):
     """Standardized clinical development status categories, ranked by development stage."""
     
     APPROVED = "APPROVED"
@@ -46,8 +46,13 @@ class ClinicalStatusCategory(str, Enum):
     PRECLINICAL = "PRECLINICAL"
     NO_DEVELOPMENT_REPORTED = "NO_DEVELOPMENT_REPORTED"
 
-
-
+class MappingStatus(str, Enum):
+    """The mapping status of the drug/indication relationship."""
+    
+    FULLY_MAPPED = "FULLY_MAPPED"
+    DRUG_MAPPED = "DRUG_MAPPED"
+    DISEASE_MAPPED = "DISEASE_MAPPED"
+    UNMAPPED = "UNMAPPED"
 
 class ClinicalStudy(BaseModel):
     """Represents a clinical trial and its metadata."""
@@ -86,16 +91,23 @@ class DrugIndicationEvidence(BaseModel):
     disease_id: str | None = Field(
         default=None, description="The EFO ID corresponding to the disease."
     )
-    clinical_status: ClinicalStatusCategory | None = Field(
-        default=None,
-        description="The maximum clinical development status (MCDS) of the drug/indication relationship.",
-    )
 
 
 class DrugIndication(BaseModel):
     """Aggregated drug-indication relationship with multiple supporting sources."""
 
     model_config = ConfigDict(extra="allow")
+
+    # Primary identifiers (derived from IDs or most frequent)
+    id: str = Field(
+        description="Hashed identifier based on canonical drug and disease names"
+    )
+    primary_drug_name: str = Field(
+        description="Preferred drug name from ChEMBL or most frequent label"
+    )
+    primary_disease_name: str = Field(
+        description="Preferred disease name from EFO or most frequent label"
+    )
 
     drug_id: str | None = Field(
         default=None,
@@ -104,15 +116,17 @@ class DrugIndication(BaseModel):
     disease_id: str | None = Field(
         default=None, description="The EFO ID corresponding to the disease."
     )
-    drug_name: str = Field(..., description="The name of the drug.")
-    disease_name: str = Field(..., description="The name of the disease.")
+
     sources: list[ClinicalStudy] = Field(
         ...,
         description="List of studies and their metadata that supports the association.",
     )
-    clinical_status: ClinicalStatusCategory | None = Field(
+    max_clinical_status: MaxClinicalStatusCategory | None = Field(
         default=None,
         description="The maximum clinical development status (MCDS) of the drug/indication relationship.",
+    )
+    mapping_status: MappingStatus = Field(
+        description="The mapping status of the drug/indication relationship.",
     )
 
 

@@ -19,6 +19,8 @@ def spark_session():
         .set("spark.default.parallelism", "4")
         .set("spark.sql.adaptive.enabled", "true")
         .set("spark.ui.enabled", "false")
+        .set("spark.driver.host", "localhost")
+        .set("spark.driver.bindAddress", "127.0.0.1")
     )
     return (
         SparkSession.builder
