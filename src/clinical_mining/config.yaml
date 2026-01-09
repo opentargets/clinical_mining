@@ -27,7 +27,8 @@ datasets:
   drug_index_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/inputs/drug_molecule # null
   ttd_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/inputs/P1-05-Drug_disease.txt # null
   ema_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/inputs/medicines-output-medicines-report_en.xlsx # null
-  output_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/outputs/clinical_trials # ???
+  pmda_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/inputs/pmda_approvals.pdf # null
+  output_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/output/clinical_precedence # ???
 
 # Input Data Sources - Each key becomes the name of a DataFrame available to the pipeline steps.
 inputs:
@@ -139,13 +140,22 @@ pipeline:
       function: clinical_mining.data_sources.ema.extract_ema_indications
       parameters:
         indications_path: ${datasets.ema_path}
+    - name: pmda_raw
+      function: clinical_mining.data_sources.pmda.parse_pmda_approvals
+      parameters:
+        pmda_path: ${datasets.pmda_path}
+    - name: pmda_indications
+      function: clinical_mining.data_sources.pmda.extract_pmda_indications
+      parameters:
+        df: $pmda_raw
+        spark: $spark_session
 
   # POST-PROCESS: Final transformation steps that run sequentially on the unified `indications` DataFrame.
   post_process:
     - name: indications
       function: clinical_mining.utils.polars_helpers.union_dfs
       parameters:
-        dfs: [$aact_indications, $chembl_indications, $ttd_indications, $ema_indications]
+        dfs: [$aact_indications, $chembl_indications, $ttd_indications, $ema_indications, $pmda_indications]
     - name: indications_w_metadata
       function: clinical_mining.utils.polars_helpers.join_dfs
       parameters:

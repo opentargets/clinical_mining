@@ -14,6 +14,7 @@ dependencies = [
     "loguru>=0.7.3",
     "ontoma",
     "pandas>=2.3.3",
+    "pdfplumber>=0.11.8",
     "polars>=1.34.0",
     "polars-hash>=0.5.5",
     "pyarrow>=21.0.0",
@@ -31,7 +32,7 @@ dev = []
 packages = ["src/clinical_mining"]
 
 [tool.uv.sources]
-ontoma = { git = "https://github.com/opentargets/OnToma", rev = "il-nlp" }
+ontoma = { git = "https://github.com/opentargets/OnToma", rev = "il-nlp-disease" }
 
 [build-system]
 requires = ["hatchling"]

@@ -133,6 +133,15 @@ def map_entities(
     Returns:
         Polars DataFrame with added drug and disease ID columns
     """
+    # Ensure downstream logic always has the ID columns available for coalesce/drop
+    missing_id_columns = []
+    if disease_id_column_name not in clinical_associations.columns:
+        missing_id_columns.append(pl.lit(None).alias(disease_id_column_name))
+    if drug_id_column_name not in clinical_associations.columns:
+        missing_id_columns.append(pl.lit(None).alias(drug_id_column_name))
+    if missing_id_columns:
+        clinical_associations = clinical_associations.with_columns(missing_id_columns)
+
     # Convert only essential columns to Spark DataFrame for OnToma processing
     associations_spark = convert_polars_to_spark(
         clinical_associations.select(drug_column_name, disease_column_name), spark
