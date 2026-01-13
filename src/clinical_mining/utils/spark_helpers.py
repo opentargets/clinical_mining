@@ -1,5 +1,7 @@
 from pyspark.sql import SparkSession
-from pyspark.conf import SparkConf
+import sparknlp
+from ontoma.ner._pipelines import get_device
+
 
 def spark_session() -> SparkSession:
     """OnToma works on Spark dataframes."""
@@ -7,25 +9,15 @@ def spark_session() -> SparkSession:
         SparkSession.getActiveSession().stop()
     except Exception:
         pass
-    
-    config = (
-        SparkConf()
-        .set("spark.jars.packages", "com.johnsnowlabs.nlp:spark-nlp_2.12:5.0.0")
-        .set("spark.driver.memory", "10g")
-        .set("spark.driver.maxResultSize", "4g")
-        .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
-        .set("spark.kryoserializer.buffer.max", "512m")
-        .set("spark.sql.shuffle.partitions", "50")
-        .set("spark.default.parallelism", "4")
-        .set("spark.sql.adaptive.enabled", "true")
-        .set("spark.ui.enabled", "false")
-        .set("spark.driver.host", "localhost")
-        .set("spark.driver.bindAddress", "127.0.0.1")
-    )
-    return (
-        SparkSession.builder
-        .appName("clinical_mining_entity_mapping")
-        .master("local[4]")
-        .config(conf=config)
-        .getOrCreate()
-    )
+    params = {
+        "spark.driver.memory":"10g",
+        "spark.driver.maxResultSize":"4g",
+        "spark.serializer":"org.apache.spark.serializer.KryoSerializer",
+        "spark.kryoserializer.buffer.max":"512m",
+        "spark.sql.shuffle.partitions": "50",
+        "spark.default.parallelism": "4",
+        "spark.sql.adaptive.enabled": "true",
+        "spark.ui.enabled": "false",
+    }
+    is_apple_silicon = get_device() == "mps"
+    return sparknlp.start(params=params, apple_silicon=is_apple_silicon)
