@@ -19,13 +19,19 @@ def extract_chembl_indications(
 
     indications = (
         raw_indications.select(
-            pl.col("_metadata").struct.field("all_molecule_chembl_ids").alias("drug_ids"),
+            pl.col("_metadata")
+            .struct.field("all_molecule_chembl_ids")
+            .alias("drug_ids"),
             pl.col("efo_id").str.replace(":", "_").alias("disease_id"),
             "indication_refs",
+            "max_phase_for_ind",
         )
         .explode("indication_refs")
         .with_columns(
-            pl.col("indication_refs").struct.field("ref_id").str.split(",").alias("studyId"),
+            pl.col("indication_refs")
+            .struct.field("ref_id")
+            .str.split(",")
+            .alias("studyId"),
             pl.col("indication_refs").struct.field("ref_type").alias("source"),
             pl.col("indication_refs").struct.field("ref_url").alias("url"),
         )
@@ -34,10 +40,22 @@ def extract_chembl_indications(
         .rename({"drug_ids": "drug_id"})
         .with_columns(
             url=pl.when(pl.col("source") == "ClinicalTrials")
-            .then(pl.concat_str([pl.lit("https://clinicaltrials.gov/search?term="), pl.col("studyId")]))
-            .otherwise(pl.col("url"))
+            .then(
+                pl.concat_str(
+                    [
+                        pl.lit("https://clinicaltrials.gov/search?term="),
+                        pl.col("studyId"),
+                    ]
+                )
+            )
+            .otherwise(pl.col("url")),
+            clinical_phase=pl.when(pl.col("source") == "ClinicalTrials")
+            .then(pl.col("max_phase_for_ind"))
+            .when(pl.col("source").is_in(["EMA", "FDA", "DailyMed", "ATC"]))
+            .then(pl.lit("approved"))
+            .otherwise(pl.lit(None)),
         )
-        .drop("indication_refs")
+        .drop("indication_refs", "max_phase_for_ind")
         .unique()
     )
 
