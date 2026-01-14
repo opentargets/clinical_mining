@@ -14,9 +14,15 @@ def extract_ema_indications(
     raw.columns = raw.iter_rows().__next__()  # Assign columns names from first row
     return DrugIndicationEvidenceDataset(
         df=(
-            raw.slice(1)  # omit header
+            raw.slice(1)  # drop header
             .select(
-                drug_name=pl.col("Active substance").str.to_lowercase().str.split(";"),
+                drug_name=pl.coalesce(
+                    "International non-proprietary name (INN) / common name",
+                    "Active substance",
+                    "Name of medicine",
+                )
+                .str.to_lowercase()
+                .str.split(";"),
                 disease_name=pl.col("Therapeutic area (MeSH)")
                 .str.to_lowercase()
                 .str.split(";"),
