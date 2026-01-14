@@ -140,6 +140,7 @@ pipeline:
       function: clinical_mining.data_sources.ema.extract_ema_indications
       parameters:
         indications_path: ${datasets.ema_path}
+        spark: $spark_session
     - name: pmda_raw
       function: clinical_mining.data_sources.pmda.parse_pmda_approvals
       parameters:
