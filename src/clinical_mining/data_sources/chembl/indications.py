@@ -28,12 +28,9 @@ def extract_chembl_indications(
         )
         .explode("indication_refs")
         .with_columns(
-            pl.col("indication_refs")
-            .struct.field("ref_id")
-            .str.split(",")
-            .alias("studyId"),
-            pl.col("indication_refs").struct.field("ref_type").alias("source"),
-            pl.col("indication_refs").struct.field("ref_url").alias("url"),
+            studyId=pl.col("indication_refs").struct.field("ref_id").str.split(","),
+            source=pl.col("indication_refs").struct.field("ref_type"),
+            url=pl.col("indication_refs").struct.field("ref_url"),
         )
         .explode("studyId")
         .explode("drug_ids")  # Explode drug_ids after all other explodes
@@ -56,6 +53,10 @@ def extract_chembl_indications(
             .otherwise(pl.lit(None)),
         )
         .drop("indication_refs", "max_phase_for_ind")
+        # Not all evidence are mapped. We drop those since we lack drug/disease labels
+        .filter(
+            (pl.col("disease_id").is_not_null()) & (pl.col("drug_id").is_not_null())
+        )
         .unique()
     )
 
