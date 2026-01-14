@@ -15,6 +15,7 @@ def extract_ema_indications(
     return DrugIndicationEvidenceDataset(
         df=(
             raw.slice(1)  # drop header
+            .filter(pl.col("Category") == "Human")
             .select(
                 drug_name=pl.coalesce(
                     "International non-proprietary name (INN) / common name",
@@ -32,5 +33,8 @@ def extract_ema_indications(
             )
             .explode("drug_name")
             .explode("disease_name")
+            # 66 rows do not report a MeSH term
+            # TODO: Use NER to extract indications from the `Therapeutic indication` column 
+            .filter(pl.col("disease_name").is_not_null())
         )
     )
