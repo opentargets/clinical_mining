@@ -24,7 +24,7 @@ db_properties:
 datasets:
   chembl_indications_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/inputs/chembl_drug_indication.jsonl # ???
   disease_index_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/inputs/disease # null
-  drug_index_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/inputs/drug_molecule # null
+  molecule_index_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/inputs/chembl_molecule # null
   ttd_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/inputs/P1-05-Drug_disease.txt # null
   ema_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/inputs/medicines-output-medicines-report_en.xlsx # null
   pmda_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/inputs/pmda_approvals.pdf # null
@@ -35,9 +35,9 @@ inputs:
   chembl_indications_raw:
     format: json
     path: ${datasets.chembl_indications_path}
-  drug_index_spark:
+  molecule_index_spark:
     format: parquet
-    path: ${datasets.drug_index_path}
+    path: ${datasets.molecule_index_path}
   disease_index_spark:
     format: parquet
     path: ${datasets.disease_index_path}
@@ -175,7 +175,7 @@ pipeline:
         spark: $spark_session
         clinical_associations: $indications_with_clinical_phase
         disease_index: $disease_index_spark
-        drug_index: $drug_index_spark
+        drug_index: $molecule_index_spark
         chembl_curation: $chembl_curation
         drug_column_name: drug_name
         disease_column_name: disease_name
