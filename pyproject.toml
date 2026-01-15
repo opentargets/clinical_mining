@@ -32,7 +32,7 @@ dev = []
 packages = ["src/clinical_mining"]
 
 [tool.uv.sources]
-ontoma = { git = "https://github.com/opentargets/OnToma", rev = "il-nlp-disease" }
+ontoma = { git = "https://github.com/opentargets/OnToma", rev = "il_filter_drug_label_lut" }
 
 [build-system]
 requires = ["hatchling"]
