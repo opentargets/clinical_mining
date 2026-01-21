@@ -1,10 +1,10 @@
 import polars as pl
 
-from clinical_mining.dataset import DrugIndicationEvidenceDataset
+from clinical_mining.dataset import ClinicalEvidence
 
 def extract_ttd_indications(
     indications_path: str,
-) -> DrugIndicationEvidenceDataset:
+) -> ClinicalEvidence:
     """Extract drug/indication relationships from TTD Indications dataset."""
     # Read the file into a list of lines
     with open(indications_path, "r", encoding="utf-8") as file:
@@ -38,14 +38,14 @@ def extract_ttd_indications(
             )
 
     # Create a DataFrame
-    return DrugIndicationEvidenceDataset(
+    return ClinicalEvidence(
         df=(
             pl.DataFrame(
                 data,
                 schema=[
                     "ttd_id",
-                    "drug_name",
-                    "disease_name",
+                    "drugFromSource",
+                    "diseaseFromSource",
                     "icd11_id",
                     "clinical_status",
                 ],
@@ -54,11 +54,11 @@ def extract_ttd_indications(
             # remove first line that includes column names
             .slice(1)
             .select(
-                drug_name=pl.col("drug_name").str.to_lowercase(),
-                disease_name=pl.col("disease_name").str.to_lowercase(),
+                drugFromSource=pl.col("drugFromSource").str.to_lowercase(),
+                diseaseFromSource=pl.col("diseaseFromSource").str.to_lowercase(),
                 phase=pl.col("clinical_status").str.to_lowercase(),
                 studyId=pl.concat_str(
-                    [pl.col("ttd_id"), pl.lit("/"), pl.col("disease_name")]
+                    [pl.col("ttd_id"), pl.lit("/"), pl.col("diseaseFromSource")]
                 ).str.to_lowercase(),
                 source=pl.lit("TTD"),
             )

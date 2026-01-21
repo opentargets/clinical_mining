@@ -2,7 +2,7 @@ import polars as pl
 
 from ontoma.ner.disease import extract_disease_entities
 
-from clinical_mining.dataset import DrugIndicationEvidenceDataset
+from clinical_mining.dataset import ClinicalEvidence
 from clinical_mining.utils.polars_helpers import convert_polars_to_spark
 from clinical_mining.utils.spark_helpers import spark_session
 
@@ -10,7 +10,7 @@ from clinical_mining.utils.spark_helpers import spark_session
 def extract_ema_indications(
     indications_path: str,
     spark: spark_session,
-) -> DrugIndicationEvidenceDataset:
+) -> ClinicalEvidence:
     """Extract drug/indication relationships from the EMA list of human drugs."""
     raw = pl.read_excel(
         indications_path,
@@ -50,16 +50,16 @@ def extract_ema_indications(
         .rename({"extracted_diseases": "extracted_disease"})
     )
 
-    return DrugIndicationEvidenceDataset(
+    return ClinicalEvidence(
         df=ner_extracted_indication.select(
-            drug_name=pl.coalesce(
+            drugFromSource=pl.coalesce(
                 "International non-proprietary name (INN) / common name",
                 "Active substance",
                 "Name of medicine",
             )
             .str.to_lowercase()
             .str.split(";"),
-            disease_name=pl.coalesce(
+            diseaseFromSource=pl.coalesce(
                 # Prioritise MeSH terms over automatically extracted diseases
                 "Therapeutic area (MeSH)",
                 "extracted_disease",
@@ -70,8 +70,8 @@ def extract_ema_indications(
             studyId=pl.col("EMA product number").str.to_lowercase(),
             source=pl.lit("EMA Human Drugs"),
         )
-        .explode("drug_name")
-        .explode("disease_name")
+        .explode("drugFromSource")
+        .explode("diseaseFromSource")
         # After extracting diseases, some rows may have null values (25 currently)
-        .filter(pl.col("drug_name").is_not_null() & pl.col("disease_name").is_not_null())
+        .filter(pl.col("drugFromSource").is_not_null() & pl.col("diseaseFromSource").is_not_null())
     )

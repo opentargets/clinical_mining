@@ -78,9 +78,26 @@ def join_dfs(dfs: list[pl.DataFrame], join_on: str, how: str = "inner") -> pl.Da
 
 
 def coalesce_column(
-    df: pl.DataFrame, output_column_name: str, input_column_names: list[str]
+    df: pl.DataFrame, output_column_name: str, input_column_names: list[str], drop: bool = False
 ) -> pl.DataFrame:
-    """Coalesces multiple columns into a single column, filling missing values with null. Note that order of input columns is important."""
-    return df.with_columns(
-        pl.coalesce(*input_column_names).alias(output_column_name)
-    ).drop(input_column_names)
+    """Safely coalesces multiple columns into a single column, filling missing values with null. Note that order of input columns is important.
+    
+    Raises:
+        ValueError: If none of the input_column_names exist in the DataFrame
+    """
+    existing_columns = [col for col in input_column_names if col in df.columns]
+    
+    # Raise error if none of the columns exist
+    if not existing_columns:
+        raise ValueError(
+            f"None of the input columns {input_column_names} exist in the DataFrame. "
+            f"Available columns: {df.columns}"
+        )
+    
+    # Coalesce only the existing columns
+    df = df.with_columns(
+        pl.coalesce(*existing_columns).alias(output_column_name)
+    )
+    return df.drop(existing_columns) if drop else df
+
+

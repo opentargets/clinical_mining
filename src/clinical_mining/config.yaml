@@ -28,10 +28,14 @@ datasets:
   ttd_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/inputs/P1-05-Drug_disease.txt # null
   ema_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/inputs/medicines-output-medicines-report_en.xlsx # null
   pmda_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/inputs/pmda_approvals.pdf # null
-  output_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/output/clinical_precedence # ???
+  # output_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/outputs/clinical_precedence # ???
+  output_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/experimental/refactor/before_mappings # ???
 
 # Input Data Sources - Each key becomes the name of a DataFrame available to the pipeline steps.
 inputs:
+  chembl_curation:
+    format: parquet
+    path: /Users/irenelopez/EBI/repos/clinical_mining/data/outputs/chembl_indications/0910.parquet
   chembl_indications_raw:
     format: json
     path: ${datasets.chembl_indications_path}
@@ -52,6 +56,7 @@ inputs:
       - start_date
       - why_stopped
       - number_of_arms
+      - official_title
   interventions:
     format: db_table
     select_cols:
@@ -74,11 +79,11 @@ inputs:
     select_cols:
       - nct_id
       - primary_purpose
-  # brief_summaries:
-  #   format: db_table
-  #   select_cols:
-  #     - nct_id
-  #     - description
+  brief_summaries:
+    format: db_table
+    select_cols:
+      - nct_id
+      - description
   # countries:
   #   format: db_table
   #   select_cols:
@@ -101,20 +106,20 @@ inputs:
 pipeline:
   # SETUP: Steps to prepare data needed by later stages (e.g., loading mapping tables).
   setup:
-    - name: chembl_curation
-      function: clinical_mining.data_sources.chembl.curation.extract_chembl_ct_curation
-      parameters:
-        db_host: ${db_properties.chembl.host}
-        db_port: ${db_properties.chembl.port}
-        db_service: ${db_properties.chembl.service}
-        db_user: ${db_properties.chembl.user}
-        db_password: ${db_properties.chembl.password}
-        oracle_client_path: ${db_properties.chembl.oracle_client_path}
+    # - name: chembl_curation
+    #   function: clinical_mining.data_sources.chembl.curation.extract_chembl_ct_curation
+    #   parameters:
+    #     db_host: ${db_properties.chembl.host}
+    #     db_port: ${db_properties.chembl.port}
+    #     db_service: ${db_properties.chembl.service}
+    #     db_user: ${db_properties.chembl.user}
+    #     db_password: ${db_properties.chembl.password}
+    #     oracle_client_path: ${db_properties.chembl.oracle_client_path}
     - name: trials
       function: clinical_mining.data_sources.aact.extract_clinical_trials
       parameters:
         studies: $studies
-        additional_metadata: ['$study_references', '$designs']
+        additional_metadata: ['$study_references', '$designs', '$brief_summaries']
         aggregation_specs: 
           pmid: 
             group_by: nct_id
@@ -163,28 +168,25 @@ pipeline:
         dfs: [$indications, $trials]
         join_on: studyId
         how: left
-    - name: indications_with_clinical_phase
+    - name: final_df
       function: clinical_mining.utils.polars_helpers.coalesce_column
       parameters:
         df: $indications_w_metadata
-        output_column_name: clinical_phase
+        output_column_name: clinicalPhase
         input_column_names: ["phase", "phase_right"]
-    - name: trials_mapped
-      function: clinical_mining.utils.mapping.map_entities
-      parameters:
-        spark: $spark_session
-        clinical_associations: $indications_with_clinical_phase
-        disease_index: $disease_index_spark
-        drug_index: $molecule_index_spark
-        chembl_curation: $chembl_curation
-        drug_column_name: drug_name
-        disease_column_name: disease_name
-        ner_cache_path: ".cache/ner/2025-11-03.parquet"
-    - name: aggregated_dataset
-      function: clinical_mining.dataset.DrugIndicationDataset.from_evidence
-      parameters:
-        evidence: $trials_mapped
-    - name: final_df
-      function: clinical_mining.dataset.DrugIndicationDataset.assign_max_clinical_status
-      parameters:
-        df: $aggregated_dataset
+        drop: true
+    # - name: trials_mapped
+    #   function: clinical_mining.utils.mapping.map_entities
+    #   parameters:
+    #     spark: $spark_session
+    #     clinical_associations: $indications_with_clinical_phase
+    #     disease_index: $disease_index_spark
+    #     drug_index: $molecule_index_spark
+    #     chembl_curation: $chembl_curation
+    #     drug_column_name: drugFromSource
+    #     disease_column_name: diseaseFromSource
+    #     ner_cache_path: ".cache/ner/2025-11-03.parquet"
+    # - name: final_df
+    #   function: clinical_mining.dataset.ClinicalAssociation.from_evidence
+    #   parameters:
+    #     evidence: $trials_mapped

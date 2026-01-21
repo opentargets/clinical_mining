@@ -19,8 +19,8 @@ def _create_curation_lut(
 
     Args:
         chembl_curation_df: Spark DataFrame with ChEMBL curation data
-        entity_id_col: Column name for entity ID (e.g., 'disease_id', 'drug_id')
-        entity_name_col: Column name for entity name (e.g., 'disease_name', 'drug_name')
+        entity_id_col: Column name for entity ID (e.g., 'diseaseId', 'drugId')
+        entity_name_col: Column name for entity name (e.g., 'diseaseFromSource', 'drugFromSource')
         entity_type: Entity type code ('DS' for disease, 'CD' for compound/drug)
 
     Returns:
@@ -76,7 +76,7 @@ def _process_mapping_results(mapped_spark_df) -> pl.DataFrame:
         mapped_spark_df: Spark DataFrame with OnToma mapping results
 
     Returns:
-        Polars DataFrame with disease_ids and drug_ids columns
+        Polars DataFrame with diseaseIds and drugIds columns
     """
     return (
         pl.from_pandas(mapped_spark_df.toPandas())
@@ -84,10 +84,10 @@ def _process_mapping_results(mapped_spark_df) -> pl.DataFrame:
             [
                 pl.when(pl.col("entity_type") == "DS")
                 .then(pl.col("mapped_ids"))
-                .alias("disease_ids"),
+                .alias("diseaseIds"),
                 pl.when(pl.col("entity_type") == "CD")
                 .then(pl.col("mapped_ids"))
-                .alias("drug_ids"),
+                .alias("drugIds"),
             ]
         )
         .drop("mapped_ids")
@@ -102,8 +102,8 @@ def map_entities(
     chembl_curation: pl.DataFrame,
     drug_column_name: str,
     disease_column_name: str,
-    drug_id_column_name: str = "drug_id",
-    disease_id_column_name: str = "disease_id",
+    drug_id_column_name: str = "drugId",
+    disease_id_column_name: str = "diseaseId",
     ner_extract_drug: bool = True,
     ner_batch_size: int = 256,
     ner_cache_path: str = f".cache/ner/{datetime.now().strftime('%Y%m%d')}.parquet",
@@ -153,11 +153,11 @@ def map_entities(
     drug_label_lut = OpenTargetsDrug.as_label_lut(drug_index)
 
     # Create curation lookup tables using the helper function
-    curation_lut_disease = _create_curation_lut(
-        chembl_curation_spark, "disease_id", "disease_name", "DS"
-    )
+    # curation_lut_disease = _create_curation_lut(
+    #     chembl_curation_spark, "diseaseId", "diseaseFromSource", "DS"
+    # )
     curation_lut_drug = _create_curation_lut(
-        chembl_curation_spark, "drug_id", "drug_name", "CD"
+        chembl_curation_spark, "drugId", "drugFromSource", "CD"
     )
 
     # Prepare unified query DataFrame
@@ -172,7 +172,7 @@ def map_entities(
         entity_lut_list=[
             disease_label_lut,
             drug_label_lut,
-            curation_lut_disease,
+            # curation_lut_disease,
             curation_lut_drug,
         ],
     )
@@ -316,7 +316,7 @@ def map_entities(
         clinical_associations.join(
             # Add mapped disease IDs
             polars_mapped_df.filter(pl.col("entity_type") == "DS").select(
-                ["query_label", "disease_ids"]
+                ["query_label", "diseaseIds"]
             ),
             left_on=disease_column_name,
             right_on="query_label",
@@ -326,19 +326,19 @@ def map_entities(
         .join(
             # Add mapped drug IDs
             polars_mapped_df.filter(pl.col("entity_type") == "CD").select(
-                ["query_label", "drug_ids"]
+                ["query_label", "drugIds"]
             ),
             left_on=drug_column_name,
             right_on="query_label",
             how="left",
             suffix="_drug",
         )
-        .explode("disease_ids")
-        .explode("drug_ids")
+        .explode("diseaseIds")
+        .explode("drugIds")
         .rename(
             {
-                "disease_ids": f"new_{disease_id_column_name}",
-                "drug_ids": f"new_{drug_id_column_name}",
+                "diseaseIds": f"new_{disease_id_column_name}",
+                "drugIds": f"new_{drug_id_column_name}",
             }
         )
         .with_columns(
