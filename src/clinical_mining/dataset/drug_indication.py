@@ -139,9 +139,7 @@ class ClinicalEvidence:
         )
 
         # Harmonise column names from snake to camel case
-        df = df.rename(
-            {col: snake_to_camel(col) for col in df.columns}
-        )
+        df = df.rename({col: snake_to_camel(col) for col in df.columns})
 
         # Assign clinical status to evidence (if available)
         if "clinicalPhase" in df.columns and "source" in df.columns:
@@ -154,8 +152,10 @@ class ClinicalEvidence:
                 )
                 .alias("clinicalStatus")
             )
-        else: 
-            df = df.with_columns(clinicalStatus=pl.lit(ClinicalStatusCategory.NO_DEVELOPMENT_REPORTED))
+        else:
+            df = df.with_columns(
+                clinicalStatus=pl.lit(ClinicalStatusCategory.NO_DEVELOPMENT_REPORTED)
+            )
 
         self.df = validate_schema(df, ClinicalEvidenceSchema)
 
@@ -165,21 +165,19 @@ class ClinicalAssociation:
 
     AGGREGATION_FIELDS = {
         "id",
-        "drugId",
-        "diseaseId",
         "drugName",
         "diseaseName",
+        "drugId",
+        "diseaseId",
     }
 
     def __init__(self, df: pl.DataFrame):
-        """Initializes the dataset, validating and aligning the DataFrame.
+        """Initialises the dataset, validating and aligning the DataFrame.
 
         Also assigns mapping status and maximum clinical status.
         """
 
         self.df = df.with_columns(
-            # Create hash to use as primary key (no studyId in this case)
-            id=plh.concat_str("drugName", "diseaseName").chash.sha2_256(),
             mappingStatus=self._assign_mapping_status(
                 pl.col("drugId"), pl.col("diseaseId")
             ),
@@ -202,6 +200,8 @@ class ClinicalAssociation:
 
         agg_df = (
             evidence.with_columns(
+                # Create hash to use as primary key (no studyId in this case)
+                id=plh.concat_str("drugName", "diseaseName").chash.sha2_256(),
                 study_info=pl.struct([pl.col(c) for c in study_metadata_cols]),
             )
             .group_by(list(cls.AGGREGATION_FIELDS))
@@ -239,10 +239,10 @@ class ClinicalAssociation:
         )
 
     def assign_max_clinical_status(self) -> "ClinicalAssociation":
-        """Assign harmonized clinical status using Maximum Clinical Development Status (MCDS) logic.
+        """Assign harmonised clinical status using Maximum Clinical Development Status (MCDS) logic.
 
         For each drug-indication pair, determines the highest-ranked clinical status
-        across all supporting sources based on the harmonization categories.
+        across all supporting sources based on the harmonisation categories.
 
         Returns:
             ClinicalAssociation with clinical_status field added containing the MCDS category
@@ -285,10 +285,8 @@ class ClinicalAssociation:
 
         # Apply MCDS logic to each drug-indication pair
         self.df = self.df.with_columns(
-            [
-                pl.col("sources")
-                .map_elements(get_max_clinical_status, return_dtype=pl.String)
-                .alias("maxClinicalStatus")
-            ]
+            maxClinicalStatus=pl.col("sources").map_elements(
+                get_max_clinical_status, return_dtype=pl.String
+            )
         )
         return self
