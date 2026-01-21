@@ -28,14 +28,13 @@ datasets:
   ttd_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/inputs/P1-05-Drug_disease.txt # null
   ema_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/inputs/medicines-output-medicines-report_en.xlsx # null
   pmda_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/inputs/pmda_approvals.pdf # null
-  # output_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/outputs/clinical_precedence # ???
-  output_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/experimental/refactor/before_mappings # ???
+  output_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/outputs/clinical_precedence # ???
 
 # Input Data Sources - Each key becomes the name of a DataFrame available to the pipeline steps.
 inputs:
   chembl_curation:
     format: parquet
-    path: /Users/irenelopez/EBI/repos/clinical_mining/data/outputs/chembl_indications/0910.parquet
+    path: /Users/irenelopez/EBI/repos/clinical_mining/data/outputs/chembl_indications/2101.parquet
   chembl_indications_raw:
     format: json
     path: ${datasets.chembl_indications_path}
@@ -168,25 +167,25 @@ pipeline:
         dfs: [$indications, $trials]
         join_on: studyId
         how: left
-    - name: final_df
+    - name: indications_with_clinical_phase
       function: clinical_mining.utils.polars_helpers.coalesce_column
       parameters:
         df: $indications_w_metadata
         output_column_name: clinicalPhase
         input_column_names: ["phase", "phase_right"]
         drop: true
-    # - name: trials_mapped
-    #   function: clinical_mining.utils.mapping.map_entities
-    #   parameters:
-    #     spark: $spark_session
-    #     clinical_associations: $indications_with_clinical_phase
-    #     disease_index: $disease_index_spark
-    #     drug_index: $molecule_index_spark
-    #     chembl_curation: $chembl_curation
-    #     drug_column_name: drugFromSource
-    #     disease_column_name: diseaseFromSource
-    #     ner_cache_path: ".cache/ner/2025-11-03.parquet"
-    # - name: final_df
-    #   function: clinical_mining.dataset.ClinicalAssociation.from_evidence
-    #   parameters:
-    #     evidence: $trials_mapped
+    - name: trials_mapped
+      function: clinical_mining.utils.mapping.map_entities
+      parameters:
+        spark: $spark_session
+        clinical_associations: $indications_with_clinical_phase
+        disease_index: $disease_index_spark
+        drug_index: $molecule_index_spark
+        chembl_curation: $chembl_curation
+        drug_column_name: drugFromSource
+        disease_column_name: diseaseFromSource
+        ner_cache_path: ".cache/ner/2025-11-03.parquet"
+    - name: final_df
+      function: clinical_mining.dataset.ClinicalAssociation.from_evidence
+      parameters:
+        evidence: $trials_mapped

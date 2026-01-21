@@ -73,17 +73,13 @@ def extract_clinical_trials(
                         )
 
             studies = studies.join(metadata_df, on="nct_id", how="left")
+
+    # Add `trial_` prefix to all trial metadata columns
+    trial_metadata_cols = [c for c in studies.columns if c not in ["nct_id", "phase"]]
     return ClinicalTrial(
         df=(
             studies
-            # .rename(
-            #     # Prefix metadata columns (except the join key) to avoid collisions
-            #     {
-            #         col: f"nct_{col}"
-            #         for col in metadata_df.columns
-            #         if not col.startswith("nct_")
-            #     }
-            # )
+            .rename({col: f"trial_{col}" for col in trial_metadata_cols})
             .rename({"nct_id": "studyId"})
         )
     )

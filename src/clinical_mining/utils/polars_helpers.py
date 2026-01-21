@@ -100,4 +100,3 @@ def coalesce_column(
     )
     return df.drop(existing_columns) if drop else df
 
-
