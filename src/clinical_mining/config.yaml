@@ -174,7 +174,7 @@ pipeline:
         output_column_name: clinicalPhase
         input_column_names: ["phase", "phase_right"]
         drop: true
-    - name: trials_mapped
+    - name: output_clinical_evidence
       function: clinical_mining.utils.mapping.map_entities
       parameters:
         spark: $spark_session
@@ -185,7 +185,7 @@ pipeline:
         drug_column_name: drugFromSource
         disease_column_name: diseaseFromSource
         ner_cache_path: ".cache/ner/2025-11-03.parquet"
-    - name: final_df
+    - name: output_clinical_associations
       function: clinical_mining.dataset.ClinicalAssociation.from_evidence
       parameters:
-        evidence: $trials_mapped
+        evidence: $output_clinical_evidence
