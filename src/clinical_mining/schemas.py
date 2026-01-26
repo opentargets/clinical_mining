@@ -72,7 +72,7 @@ class MappingStatus(str, Enum):
     UNMAPPED = "UNMAPPED"
 
 
-class ClinicalTrialSchema(BaseModel):
+class ClinicalRecordSchema(BaseModel):
     """Represents a clinical trial and its metadata."""
 
     model_config = ConfigDict(extra="allow")
@@ -123,7 +123,7 @@ class ClinicalEvidenceSchema(BaseModel):
     )
 
 
-class ClinicalAssociationSchema(BaseModel):
+class ClinicalIndicationSchema(BaseModel):
     """Aggregated drug-indication relationship with multiple supporting sources."""
 
     model_config = ConfigDict(extra="allow")

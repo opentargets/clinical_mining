@@ -115,7 +115,7 @@ pipeline:
     #     db_password: ${db_properties.chembl.password}
     #     oracle_client_path: ${db_properties.chembl.oracle_client_path}
     - name: trials
-      function: clinical_mining.data_sources.aact.extract_clinical_trials
+      function: clinical_mining.data_sources.aact.extract_clinical_record
       parameters:
         studies: $studies
         additional_metadata: ['$study_references', '$designs', '$brief_summaries']
@@ -127,21 +127,21 @@ pipeline:
   # GENERATE: Steps that generate the core drug/indication DataFrames.
   generate:
     - name: aact_indications
-      function: clinical_mining.data_sources.aact.extract_drug_indications
+      function: clinical_mining.data_sources.aact.extract_clinical_indication
       parameters:
         interventions: $interventions
         conditions: $conditions
     - name: chembl_indications
-      function: clinical_mining.data_sources.chembl.indications.extract_chembl_indications
+      function: clinical_mining.data_sources.chembl.indications.extract_clinical_indication
       parameters:
         raw_indications: $chembl_indications_raw
         exclude_trials: true
     - name: ttd_indications
-      function: clinical_mining.data_sources.ttd.extract_ttd_indications
+      function: clinical_mining.data_sources.ttd.extract_clinical_indication
       parameters:
         indications_path: ${datasets.ttd_path}
     - name: ema_indications
-      function: clinical_mining.data_sources.ema.extract_ema_indications
+      function: clinical_mining.data_sources.ema.extract_clinical_indication
       parameters:
         indications_path: ${datasets.ema_path}
         spark: $spark_session
@@ -150,7 +150,7 @@ pipeline:
       parameters:
         pmda_path: ${datasets.pmda_path}
     - name: pmda_indications
-      function: clinical_mining.data_sources.pmda.extract_pmda_indications
+      function: clinical_mining.data_sources.pmda.extract_clinical_indication
       parameters:
         df: $pmda_raw
         spark: $spark_session
@@ -186,6 +186,6 @@ pipeline:
         disease_column_name: diseaseFromSource
         ner_cache_path: ".cache/ner/2025-11-03.parquet"
     - name: output_clinical_associations
-      function: clinical_mining.dataset.ClinicalAssociation.from_evidence
+      function: clinical_mining.dataset.ClinicalIndication.from_evidence
       parameters:
         evidence: $output_clinical_evidence

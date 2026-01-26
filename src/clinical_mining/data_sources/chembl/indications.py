@@ -5,7 +5,7 @@ import polars as pl
 from clinical_mining.dataset import ClinicalEvidence
 
 
-def extract_chembl_indications(
+def extract_clinical_indication(
     raw_indications: pl.DataFrame, exclude_trials: bool = False
 ) -> ClinicalEvidence:
     """

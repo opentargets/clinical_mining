@@ -7,7 +7,7 @@ from clinical_mining.utils.polars_helpers import convert_polars_to_spark
 from clinical_mining.utils.spark_helpers import spark_session
 
 
-def extract_ema_indications(
+def extract_clinical_indication(
     indications_path: str,
     spark: spark_session,
 ) -> ClinicalEvidence:

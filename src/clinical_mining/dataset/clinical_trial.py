@@ -1,9 +1,9 @@
 import polars as pl
 
-from clinical_mining.schemas import validate_schema, ClinicalTrialSchema, snake_to_camel
+from clinical_mining.schemas import validate_schema, ClinicalRecordSchema, snake_to_camel
 
 
-class ClinicalTrial:
+class ClinicalRecord:
     """A dataset for clinical studies (e.g. clinical trial, an USAN reference), wrapping a Polars DataFrame."""
 
     def __init__(self, df: pl.DataFrame):
@@ -12,4 +12,4 @@ class ClinicalTrial:
         df = df.rename(
             {col: snake_to_camel(col) for col in df.columns}
         )
-        self.df = validate_schema(df, ClinicalTrialSchema)
+        self.df = validate_schema(df, ClinicalRecordSchema)

@@ -2,7 +2,7 @@ import polars as pl
 
 from clinical_mining.dataset import ClinicalEvidence
 
-def extract_ttd_indications(
+def extract_clinical_indication(
     indications_path: str,
 ) -> ClinicalEvidence:
     """Extract drug/indication relationships from TTD Indications dataset."""

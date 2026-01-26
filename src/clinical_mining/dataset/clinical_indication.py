@@ -5,7 +5,7 @@ from clinical_mining.schemas import (
     snake_to_camel,
     validate_schema,
     ClinicalEvidenceSchema,
-    ClinicalAssociationSchema,
+    ClinicalIndicationSchema,
     ClinicalStatusCategory,
 )
 from clinical_mining.utils.polars_helpers import coalesce_column
@@ -160,7 +160,7 @@ class ClinicalEvidence:
         self.df = validate_schema(df, ClinicalEvidenceSchema)
 
 
-class ClinicalAssociation:
+class ClinicalIndication:
     """A dataset for drug-indication relationships, wrapping a Polars DataFrame."""
 
     AGGREGATION_FIELDS = {
@@ -183,7 +183,7 @@ class ClinicalAssociation:
             ),
         )
         self.assign_max_clinical_status()
-        self.df = validate_schema(self.df, ClinicalAssociationSchema)
+        self.df = validate_schema(self.df, ClinicalIndicationSchema)
 
     @classmethod
     def _get_study_metadata_columns(cls, df: pl.DataFrame) -> list[str]:
@@ -191,8 +191,8 @@ class ClinicalAssociation:
         return sorted(list(set(df.columns) - cls.AGGREGATION_FIELDS))
 
     @classmethod
-    def from_evidence(cls, evidence: pl.DataFrame) -> "ClinicalAssociation":
-        """Aggregate drug/indication evidence into a ClinicalAssociation."""
+    def from_evidence(cls, evidence: pl.DataFrame) -> "ClinicalIndication":
+        """Aggregate drug/indication evidence into a ClinicalIndication."""
         # Assert validity of evidence
         validate_schema(evidence, ClinicalEvidenceSchema)
 
@@ -225,10 +225,10 @@ class ClinicalAssociation:
             .otherwise(pl.lit("UNMAPPED"))
         )
 
-    def filter_by_studyid(self, studyId: str) -> "ClinicalAssociation":
+    def filter_by_studyid(self, studyId: str) -> "ClinicalIndication":
         """Get associations supported by a given study; for example, a clinical trial ID."""
 
-        return ClinicalAssociation(
+        return ClinicalIndication(
             df=self.df.with_columns(
                 pl.col("sources")
                 .list.eval(pl.element().struct["studyId"])
@@ -238,14 +238,14 @@ class ClinicalAssociation:
             .drop("studyIds")
         )
 
-    def assign_max_clinical_status(self) -> "ClinicalAssociation":
+    def assign_max_clinical_status(self) -> "ClinicalIndication":
         """Assign harmonised clinical status using Maximum Clinical Development Status (MCDS) logic.
 
         For each drug-indication pair, determines the highest-ranked clinical status
         across all supporting sources based on the harmonisation categories.
 
         Returns:
-            ClinicalAssociation with clinical_status field added containing the MCDS category
+            ClinicalIndication with clinical_status field added containing the MCDS category
         """
 
         def get_max_clinical_status(sources_list) -> str:

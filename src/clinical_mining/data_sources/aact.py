@@ -1,7 +1,7 @@
 """Utils to transform AACT database to drug/indication relationships."""
 
 import polars as pl
-from clinical_mining.dataset import ClinicalEvidence, ClinicalTrial
+from clinical_mining.dataset import ClinicalEvidence, ClinicalRecord
 
 
 def process_interventions(interventions: pl.DataFrame) -> pl.DataFrame:
@@ -45,11 +45,11 @@ def process_conditions(
     )
 
 
-def extract_clinical_trials(
+def extract_clinical_record(
     studies: pl.DataFrame,
     additional_metadata: list[pl.DataFrame] | None = None,
     aggregation_specs: dict[str, dict[str, str]] | None = None,
-) -> ClinicalTrial:
+) -> ClinicalRecord:
     """Return clinical trials with desired extra annotations from other tables.
 
     Args:
@@ -58,7 +58,7 @@ def extract_clinical_trials(
         aggregation_specs (dict[str, dict[str, str]] | None): Optional dictionary of aggregation specifications for the additional metadata DataFrames.
 
     Returns:
-        ClinicalTrial: The processed studies.
+        ClinicalRecord: The processed studies.
     """
     STUDY_TYPES = ["INTERVENTIONAL", "OBSERVATIONAL", "EXPANDED_ACCESS"]
     studies = studies.filter(pl.col("study_type").is_in(STUDY_TYPES))
@@ -76,7 +76,7 @@ def extract_clinical_trials(
 
     # Add `trial_` prefix to all trial metadata columns
     trial_metadata_cols = [c for c in studies.columns if c not in ["nct_id", "phase"]]
-    return ClinicalTrial(
+    return ClinicalRecord(
         df=(
             studies
             .rename({col: f"trial_{col}" for col in trial_metadata_cols})
@@ -85,7 +85,7 @@ def extract_clinical_trials(
     )
 
 
-def extract_drug_indications(
+def extract_clinical_indication(
     interventions: pl.DataFrame,
     conditions: pl.DataFrame,
 ) -> ClinicalEvidence:

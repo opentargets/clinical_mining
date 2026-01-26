@@ -8,7 +8,7 @@ from ontoma.ner.disease import extract_disease_entities
 from clinical_mining.utils.polars_helpers import convert_polars_to_spark
 
 from clinical_mining.utils.spark_helpers import spark_session
-from clinical_mining.dataset.drug_indication import ClinicalEvidence
+from clinical_mining.dataset.clinical_indication import ClinicalEvidence
 
 
 # ============================================================================
@@ -322,7 +322,7 @@ def parse_pmda_approvals(pmda_path: str) -> pl.DataFrame:
     )
 
 
-def extract_pmda_indications(
+def extract_clinical_indication(
     df: pl.DataFrame,
     spark: spark_session,
 ) -> ClinicalEvidence:
