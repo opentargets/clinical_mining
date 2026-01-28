@@ -19,7 +19,22 @@ def validate_schema(df: pl.DataFrame, model: type[BaseModel]) -> pl.DataFrame:
     return df.select(mandatory_fields + extra_fields)
 
 
-class DrugIndicationSource(str, Enum):
+def snake_to_camel(snake_str: str) -> str:
+    """Convert a snake_case string to camelCase.
+
+    Examples:
+        >>> snake_to_camel('clinical_phase')
+        'clinicalPhase'
+        >>> snake_to_camel('studyId')
+        'studyId'
+    """
+    # Split by underscore
+    components = snake_str.split("_")
+    # Keep first component lowercase, capitalize the rest
+    return components[0] + "".join(word.capitalize() for word in components[1:])
+
+
+class ClinicalSource(str, Enum):
     """The data source of the evidence."""
 
     AACT = "AACT"
@@ -34,9 +49,9 @@ class DrugIndicationSource(str, Enum):
     PMDA = "PMDA"
 
 
-class MaxClinicalStatusCategory(str, Enum):
-    """Standardized clinical development status categories, ranked by development stage."""
-    
+class ClinicalStageCategory(str, Enum):
+    """Standardised clinical development status categories, ranked by development stage."""
+
     APPROVED = "APPROVED"
     POST_APPROVAL_WITHDRAWN = "POST_APPROVAL_WITHDRAWN"
     REGULATORY_REVIEW = "REGULATORY_REVIEW"
@@ -47,86 +62,99 @@ class MaxClinicalStatusCategory(str, Enum):
     PRECLINICAL = "PRECLINICAL"
     NO_DEVELOPMENT_REPORTED = "NO_DEVELOPMENT_REPORTED"
 
+
 class MappingStatus(str, Enum):
     """The mapping status of the drug/indication relationship."""
-    
+
     FULLY_MAPPED = "FULLY_MAPPED"
     DRUG_MAPPED = "DRUG_MAPPED"
     DISEASE_MAPPED = "DISEASE_MAPPED"
     UNMAPPED = "UNMAPPED"
 
-class ClinicalStudy(BaseModel):
-    """Represents a clinical trial and its metadata."""
+class ClinicalReportType(str, Enum):
+    """The type of the clinical record."""
+
+    CLINICAL_TRIAL = "CLINICAL_TRIAL"
+    DRUG_LABEL = "DRUG_LABEL"
+    REGULATORY = "REGULATORY_AGENCY"
+    CURATED_RESOURCE = "CURATED_RESOURCE"
+
+class AssociatedDrug(BaseModel):
+
+    drugFromSource: str = Field(..., description="The drug label used at the source.")
+    drugId: str | None = Field(..., description="The assigned drug ID.")
+
+class AssociatedDisease(BaseModel):
+
+    diseaseFromSource: str = Field(..., description="The disease label used at the source.")
+    diseaseId: str | None = Field(..., description="The assigned disease ID.")
+
+class ClinicalReportSchema(BaseModel):
+    """Represents a clinical record and its metadata."""
 
     model_config = ConfigDict(extra="allow")
 
-    studyId: str = Field(..., description="The study identifier, e.g. NCT04012606.")
-    url: str = Field(
-        default=None, description="The URL of the study, e.g. in Dailymed."
+    id: str = Field(..., description="The identifier for the clinical reference, e.g. NCT04012606.")
+    clinicalStage: ClinicalStageCategory = Field(
+        description="The clinical development status of the clinical reference after harmonisation .",
     )
-    source: DrugIndicationSource | None = Field(
-        default=None, description="The data source of the study."
+    phaseFromSource: str | None = Field(
+        default=None, description="The phase of the report at the source."
     )
-
-
-class DrugIndicationEvidence(BaseModel):
-    """Represents a single piece of evidence linking a drug to an indication from a source."""
-
-    model_config = ConfigDict(extra="allow")
-
-    source: DrugIndicationSource = Field(
-        ..., description="The data source of the evidence."
+    type: ClinicalReportType = Field(
+        default=None, description="The type of the report."
     )
-    studyId: str | None = Field(
-        default=None, description="The study identifier that supports the drug/indication relationship.",
+    url: str | None = Field(
+        default=None, description="The URL of the report, e.g. in Dailymed."
     )
-    drug_name: str | None = Field(
-        default=None, description="The name of the drug.")
-    disease_name: str | None = Field(
-        default=None, description="The name of the disease.")
-    drug_id: str | None = Field(
-        default=None,
-        description="The ChEMBL ID corresponding to the drug.",
+    source: ClinicalSource = Field(
+        default=None, description="The data source of the report."
     )
-    disease_id: str | None = Field(
-        default=None, description="The EFO ID corresponding to the disease."
+    diseases: list[AssociatedDisease] = Field(
+        default=None, description="The diseases associated with the report."
+    )
+    drugs: list[AssociatedDrug] = Field(
+        default=None, description="The drugs associated with the study."
+    )
+    hasExpertReview: bool = Field(
+        default=False,
+        description="Whether the report has been reviewed by an expert.",
     )
 
+   # + optional trial metadata fields with the `trial` prefix. E.g. trialDescription
 
-class DrugIndication(BaseModel):
+class ClinicalIndicationSchema(BaseModel):
     """Aggregated drug-indication relationship with multiple supporting sources."""
 
     model_config = ConfigDict(extra="allow")
 
-    # Primary identifiers (derived from IDs or most frequent)
-    id: str = Field(
-        description="Hashed identifier based on canonical drug and disease names"
+    # Primary identifiers (derived from IDs)
+    id: str = Field(description="Hashed identifier based on drug and disease names")
+    drugName: str = Field(
+        description="Drug name (ChEMBL ID if mapping is available, otherwise label from clinical source)"
     )
-    primary_drug_name: str = Field(
-        description="Preferred drug name from ChEMBL or most frequent label"
-    )
-    primary_disease_name: str = Field(
-        description="Preferred disease name from EFO or most frequent label"
+    diseaseName: str = Field(
+        description="Disease name (EFO ID if mapping is available, otherwise label from clinical source)"
     )
 
-    drug_id: str | None = Field(
+    drugId: str | None = Field(
         default=None,
         description="The ChEMBL ID corresponding to the drug.",
     )
-    disease_id: str | None = Field(
+    diseaseId: str | None = Field(
         default=None, description="The EFO ID corresponding to the disease."
     )
-
-    sources: list[ClinicalStudy] = Field(
-        ...,
-        description="List of studies and their metadata that supports the association.",
-    )
-    max_clinical_status: MaxClinicalStatusCategory | None = Field(
-        default=None,
+    maxClinicalStage: ClinicalStageCategory = Field(
         description="The maximum clinical development status (MCDS) of the drug/indication relationship.",
     )
-    mapping_status: MappingStatus = Field(
+    mappingStatus: MappingStatus = Field(
         description="The mapping status of the drug/indication relationship.",
     )
-
-
+    clinicalReportIds: list[str] = Field(
+        ...,
+        description="List of clinical report IDs that support the association.",
+    )
+    hasExpertReview: bool = Field(
+        default=False,
+        description="True if any of the supporting clinical reports has been reviewed by an expert.",
+    )

@@ -8,7 +8,7 @@ from ontoma.ner.disease import extract_disease_entities
 from clinical_mining.utils.polars_helpers import convert_polars_to_spark
 
 from clinical_mining.utils.spark_helpers import spark_session
-from clinical_mining.dataset.drug_indication import DrugIndicationEvidenceDataset
+from clinical_mining.dataset.clinical_indication import ClinicalEvidence
 
 
 # ============================================================================
@@ -322,11 +322,11 @@ def parse_pmda_approvals(pmda_path: str) -> pl.DataFrame:
     )
 
 
-def extract_pmda_indications(
+def extract_clinical_indication(
     df: pl.DataFrame,
     spark: spark_session,
-) -> DrugIndicationEvidenceDataset:
-    return DrugIndicationEvidenceDataset(
+) -> ClinicalEvidence:
+    return ClinicalEvidence(
         df=(
             # Extract disease entities (requires Polars - Spark - Polars conversion)
             pl.from_pandas(
@@ -359,11 +359,11 @@ def extract_pmda_indications(
             )
             .explode("active_ingredients")
             .select(
-                drug_name=pl.col("active_ingredients")
+                drugFromSource=pl.col("active_ingredients")
                 .str.strip_chars()
                 .str.to_lowercase(),
-                disease_name=pl.col("extracted_diseases"),
-                # Evidence ID: page_number in PDF/drug_name/disease_name
+                diseaseFromSource=pl.col("extracted_diseases"),
+                # Evidence ID: page_number in PDF/drugFromSource/diseaseFromSource
                 studyId=pl.concat_str(
                     [
                         pl.col("page_number"),
@@ -378,7 +378,7 @@ def extract_pmda_indications(
                 phase=pl.lit("approved"),
                 source=pl.lit("PMDA"),
             )
-            .filter((pl.col("drug_name") != "") & (pl.col("disease_name") != ""))
+            .filter((pl.col("drugFromSource") != "") & (pl.col("diseaseFromSource") != ""))
             .unique()
         )
     )

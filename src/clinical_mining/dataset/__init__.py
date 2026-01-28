@@ -1,4 +1,4 @@
-from clinical_mining.dataset.drug_indication import DrugIndicationEvidenceDataset, DrugIndicationDataset
-from clinical_mining.dataset.clinical_study import ClinicalStudyDataset
+from clinical_mining.dataset.clinical_indication import ClinicalEvidence, ClinicalIndication
+from clinical_mining.dataset.clinical_trial import ClinicalReport
 
-__all__ = ["DrugIndicationEvidenceDataset", "DrugIndicationDataset", "ClinicalStudyDataset"]
+__all__ = ["ClinicalEvidence", "ClinicalIndication", "ClinicalReport"]

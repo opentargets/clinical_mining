@@ -26,9 +26,10 @@ def main(cfg: DictConfig) -> pl.DataFrame:
         db_password=cfg.db_properties.aact.password,
     )
 
-
     # Initialise spark one time only
-    data_store["spark_session"] = next((spark_session() for name in cfg.inputs if "spark" in name), None)
+    data_store["spark_session"] = next(
+        (spark_session() for name in cfg.inputs if "spark" in name), None
+    )
     # Load all data sources
     for name, source in cfg.inputs.items():
         logger.info(f"Loading input: {name}")
@@ -40,7 +41,9 @@ def main(cfg: DictConfig) -> pl.DataFrame:
                 db_schema=cfg.db_properties.aact.schema,
             )
         elif "spark" in name:
-            data_store[name] = data_store["spark_session"].read.load(source.path, format=source.format)
+            data_store[name] = data_store["spark_session"].read.load(
+                source.path, format=source.format
+            )
         elif source.format == "parquet":
             data_store[name] = pl.read_parquet(source.path)
         elif source.format == "json":
@@ -60,12 +63,13 @@ def main(cfg: DictConfig) -> pl.DataFrame:
     output_dir = Path(cfg.datasets.output_path) / date
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    final_df = data_store["final_df"].unique()
-    final_df.write_parquet(output_dir / "df.parquet")
+    outputs = {k: v for k, v in data_store.items() if k.startswith("output_")}
+    for k, v in outputs.items():
+        output_name = k.removeprefix("output_")
+        v.unique().write_parquet(output_dir / f"{output_name}.parquet")
+        logger.info(f"output {output_name} written to {output_dir}")
 
-    logger.info(f"Output written to {output_dir}")
-
-    return final_df
+    return data_store
 
 
 if __name__ == "__main__":

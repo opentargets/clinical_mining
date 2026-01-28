@@ -10,7 +10,9 @@ import polars as pl
 from pyspark.sql import SparkSession
 import pyspark.sql.functions as f
 
+from clinical_mining.dataset.clinical_indication import ClinicalEvidence
 from clinical_mining.utils.polars_helpers import convert_polars_to_spark
+
 
 def _create_curation_lut(
     chembl_curation_df, entity_id_col: str, entity_name_col: str, entity_type: str
@@ -19,8 +21,8 @@ def _create_curation_lut(
 
     Args:
         chembl_curation_df: Spark DataFrame with ChEMBL curation data
-        entity_id_col: Column name for entity ID (e.g., 'disease_id', 'drug_id')
-        entity_name_col: Column name for entity name (e.g., 'disease_name', 'drug_name')
+        entity_id_col: Column name for entity ID (e.g., 'diseaseId', 'drugId')
+        entity_name_col: Column name for entity name (e.g., 'diseaseFromSource', 'drugFromSource')
         entity_type: Entity type code ('DS' for disease, 'CD' for compound/drug)
 
     Returns:
@@ -76,7 +78,7 @@ def _process_mapping_results(mapped_spark_df) -> pl.DataFrame:
         mapped_spark_df: Spark DataFrame with OnToma mapping results
 
     Returns:
-        Polars DataFrame with disease_ids and drug_ids columns
+        Polars DataFrame with diseaseIds and drugIds columns
     """
     return (
         pl.from_pandas(mapped_spark_df.toPandas())
@@ -84,10 +86,10 @@ def _process_mapping_results(mapped_spark_df) -> pl.DataFrame:
             [
                 pl.when(pl.col("entity_type") == "DS")
                 .then(pl.col("mapped_ids"))
-                .alias("disease_ids"),
+                .alias("diseaseIds"),
                 pl.when(pl.col("entity_type") == "CD")
                 .then(pl.col("mapped_ids"))
-                .alias("drug_ids"),
+                .alias("drugIds"),
             ]
         )
         .drop("mapped_ids")
@@ -102,12 +104,12 @@ def map_entities(
     chembl_curation: pl.DataFrame,
     drug_column_name: str,
     disease_column_name: str,
-    drug_id_column_name: str = "drug_id",
-    disease_id_column_name: str = "disease_id",
+    drug_id_column_name: str = "drugId",
+    disease_id_column_name: str = "diseaseId",
     ner_extract_drug: bool = True,
     ner_batch_size: int = 256,
     ner_cache_path: str = f".cache/ner/{datetime.now().strftime('%Y%m%d')}.parquet",
-) -> DataFrame:
+) -> ClinicalEvidence:
     """Map drug and disease entities to their standardized IDs using OnToma.
 
     This function uses a tiered approach for drug mapping:
@@ -131,7 +133,7 @@ def map_entities(
         ner_cache_path: Path to parquet file for caching NER results (default: .cache/ner/{datetime.now().strftime('%Y%m%d')}.parquet)
 
     Returns:
-        Polars DataFrame with added drug and disease ID columns
+        ClinicalEvidence: Dataset with added drug and disease ID columns (id, drugName, diseaseName will be overwritten)
     """
     # Ensure downstream logic always has the ID columns available for coalesce/drop
     missing_id_columns = []
@@ -153,11 +155,11 @@ def map_entities(
     drug_label_lut = OpenTargetsDrug.as_label_lut(drug_index)
 
     # Create curation lookup tables using the helper function
-    curation_lut_disease = _create_curation_lut(
-        chembl_curation_spark, "disease_id", "disease_name", "DS"
-    )
+    # curation_lut_disease = _create_curation_lut(
+    #     chembl_curation_spark, "diseaseId", "diseaseFromSource", "DS"
+    # )
     curation_lut_drug = _create_curation_lut(
-        chembl_curation_spark, "drug_id", "drug_name", "CD"
+        chembl_curation_spark, "drugId", "drugFromSource", "CD"
     )
 
     # Prepare unified query DataFrame
@@ -172,7 +174,7 @@ def map_entities(
         entity_lut_list=[
             disease_label_lut,
             drug_label_lut,
-            curation_lut_disease,
+            # curation_lut_disease,
             curation_lut_drug,
         ],
     )
@@ -201,21 +203,23 @@ def map_entities(
             logger.info(f"found {unmapped_count} unmapped drug labels...")
             if ner_cache_path:
                 cache_file = Path(ner_cache_path)
-                
+
                 # Load existing cache if it exists
                 if cache_file.exists():
                     logger.info(f"loading ner cache from: {cache_file}")
                     cached_ner = spark.read.parquet(str(cache_file))
                     cached_labels = cached_ner.select("query_label").distinct()
-                    
+
                     # Find new labels not in cache
                     new_labels = unmapped_drugs.join(
                         cached_labels, on="query_label", how="left_anti"
                     )
                     new_count = new_labels.count()
-                    
+
                     if new_count > 0:
-                        logger.info(f"applying ner to {new_count} new drug labels (using cache for {unmapped_count - new_count})...")
+                        logger.info(
+                            f"applying ner to {new_count} new drug labels (using cache for {unmapped_count - new_count})..."
+                        )
                         new_ner_results = extract_drug_entities(
                             spark=spark,
                             df=new_labels,
@@ -226,18 +230,22 @@ def map_entities(
                             use_drugtemist=True,
                             batch_size=ner_batch_size,
                         )
-                        
+
                         # Update cache with merged results
                         logger.info(f"updating cache: {cache_file}")
                         ner_extracted_raw = cached_ner.union(new_ner_results)
                         ner_extracted_raw.toPandas().to_parquet(str(cache_file))
                     else:
-                        logger.info(f"all {unmapped_count} labels found in cache, skipping ner extraction")
+                        logger.info(
+                            f"all {unmapped_count} labels found in cache, skipping ner extraction"
+                        )
                         ner_extracted_raw = cached_ner
-                
+
                 # Run NER on all labels if no cache exists
                 else:
-                    logger.info(f"no cache found, applying ner to all {unmapped_count} drug labels...")
+                    logger.info(
+                        f"no cache found, applying ner to all {unmapped_count} drug labels..."
+                    )
                     ner_extracted_raw = extract_drug_entities(
                         spark=spark,
                         df=unmapped_drugs,
@@ -254,12 +262,11 @@ def map_entities(
                     ner_extracted_raw.toPandas().to_parquet(str(cache_file))
 
             # Explode extracted drugs
-            ner_extracted = (
-                ner_extracted_raw.filter(f.size("extracted_drugs") > 0)
-                .select(
-                    f.col("query_label"),
-                    f.explode("extracted_drugs").alias("clean_label"),
-                )
+            ner_extracted = ner_extracted_raw.filter(
+                f.size("extracted_drugs") > 0
+            ).select(
+                f.col("query_label"),
+                f.explode("extracted_drugs").alias("clean_label"),
             )
 
             # Map the cleaned labels with new OnToma instance (faster and safer for clean drug names)
@@ -307,47 +314,52 @@ def map_entities(
             )
 
             recovered = ner_aggregated.count()
-            logger.info(f"ner recovered {recovered}/{unmapped_count} ({recovered / unmapped_count * 100:.1f}%)")
+            logger.info(
+                f"ner recovered {recovered}/{unmapped_count} ({recovered / unmapped_count * 100:.1f}%)"
+            )
 
     # Convert to Polars and join back
     polars_mapped_df = _process_mapping_results(mapped_df)
 
-    return (
-        clinical_associations.join(
-            # Add mapped disease IDs
-            polars_mapped_df.filter(pl.col("entity_type") == "DS").select(
-                ["query_label", "disease_ids"]
-            ),
-            left_on=disease_column_name,
-            right_on="query_label",
-            how="left",
-            suffix="_disease",
+    return ClinicalEvidence(
+        df=(
+            clinical_associations.join(
+                # Add mapped disease IDs
+                polars_mapped_df.filter(pl.col("entity_type") == "DS").select(
+                    ["query_label", "diseaseIds"]
+                ),
+                left_on=disease_column_name,
+                right_on="query_label",
+                how="left",
+                suffix="_disease",
+            )
+            .join(
+                # Add mapped drug IDs
+                polars_mapped_df.filter(pl.col("entity_type") == "CD").select(
+                    ["query_label", "drugIds"]
+                ),
+                left_on=drug_column_name,
+                right_on="query_label",
+                how="left",
+                suffix="_drug",
+            )
+            .explode("diseaseIds")
+            .explode("drugIds")
+            .rename(
+                {
+                    "diseaseIds": f"new_{disease_id_column_name}",
+                    "drugIds": f"new_{drug_id_column_name}",
+                }
+            )
+            .with_columns(
+                pl.coalesce(
+                    pl.col(disease_id_column_name),
+                    pl.col(f"new_{disease_id_column_name}"),
+                ).alias(disease_id_column_name),
+                pl.coalesce(
+                    pl.col(drug_id_column_name), pl.col(f"new_{drug_id_column_name}")
+                ).alias(drug_id_column_name),
+            )
+            .drop(f"new_{disease_id_column_name}", f"new_{drug_id_column_name}")
         )
-        .join(
-            # Add mapped drug IDs
-            polars_mapped_df.filter(pl.col("entity_type") == "CD").select(
-                ["query_label", "drug_ids"]
-            ),
-            left_on=drug_column_name,
-            right_on="query_label",
-            how="left",
-            suffix="_drug",
-        )
-        .explode("disease_ids")
-        .explode("drug_ids")
-        .rename(
-            {
-                "disease_ids": f"new_{disease_id_column_name}",
-                "drug_ids": f"new_{drug_id_column_name}",
-            }
-        )
-        .with_columns(
-            pl.coalesce(
-                pl.col(disease_id_column_name), pl.col(f"new_{disease_id_column_name}")
-            ).alias(disease_id_column_name),
-            pl.coalesce(
-                pl.col(drug_id_column_name), pl.col(f"new_{drug_id_column_name}")
-            ).alias(drug_id_column_name),
-        )
-        .drop(f"new_{disease_id_column_name}", f"new_{drug_id_column_name}")
     )

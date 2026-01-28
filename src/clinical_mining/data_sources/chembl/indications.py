@@ -2,27 +2,27 @@
 
 import polars as pl
 
-from clinical_mining.dataset import DrugIndicationEvidenceDataset
+from clinical_mining.dataset import ClinicalEvidence
 
 
-def extract_chembl_indications(
+def extract_clinical_indication(
     raw_indications: pl.DataFrame, exclude_trials: bool = False
-) -> DrugIndicationEvidenceDataset:
+) -> ClinicalEvidence:
     """
     Extract drug/indication relationships from ChEMBL Indications JSON file storing indications for drugs, and clinical candidate drugs, from a variety of sources (e.g., FDA, EMA, WHO ATC, ClinicalTrials.gov, INN, USAN).
 
     Args:
         raw_indications: ChEMBL Indications dataset in JSON form
     Returns:
-        DrugIndicationEvidenceDataset: Dataset with drug/indication relationships
+        ClinicalEvidence: Dataset with drug/indication relationships
     """
 
     indications = (
         raw_indications.select(
             pl.col("_metadata")
             .struct.field("all_molecule_chembl_ids")
-            .alias("drug_ids"),
-            pl.col("efo_id").str.replace(":", "_").alias("disease_id"),
+            .alias("drugIds"),
+            pl.col("efo_id").str.replace(":", "_").alias("diseaseId"),
             "indication_refs",
             "max_phase_for_ind",
         )
@@ -33,8 +33,8 @@ def extract_chembl_indications(
             url=pl.col("indication_refs").struct.field("ref_url"),
         )
         .explode("studyId")
-        .explode("drug_ids")  # Explode drug_ids after all other explodes
-        .rename({"drug_ids": "drug_id"})
+        .explode("drugIds")  # Explode drugIds after all other explodes
+        .rename({"drugIds": "drugId"})
         .with_columns(
             url=pl.when(pl.col("source") == "ClinicalTrials")
             .then(
@@ -55,7 +55,7 @@ def extract_chembl_indications(
         .drop("indication_refs", "max_phase_for_ind")
         # Not all evidence are mapped. We drop those since we lack drug/disease labels
         .filter(
-            (pl.col("disease_id").is_not_null()) & (pl.col("drug_id").is_not_null())
+            (pl.col("diseaseId").is_not_null()) & (pl.col("drugId").is_not_null())
         )
         .unique()
     )
@@ -63,4 +63,4 @@ def extract_chembl_indications(
     if exclude_trials:
         indications = indications.filter(pl.col("source") != "ClinicalTrials")
 
-    return DrugIndicationEvidenceDataset(df=indications)
+    return ClinicalEvidence(df=indications)

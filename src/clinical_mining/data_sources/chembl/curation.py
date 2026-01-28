@@ -38,8 +38,8 @@ def extract_chembl_ct_curation(
         .filter(~pl.col("EFO").is_in(["-NOT-CONDITION-", "-ABSENT-"]))
         .select(
             pl.col("NCT_ID").alias("studyId"),
-            pl.col("CONDITION_1").alias("disease_name"),
-            pl.col("EFO").str.replace(":", "_").alias("disease_id"),
+            pl.col("CONDITION_1").alias("diseaseFromSource"),
+            pl.col("EFO").str.replace(":", "_").alias("diseaseId"),
         )
         .drop_nulls()
         .unique()
@@ -65,7 +65,7 @@ def extract_chembl_ct_curation(
         )
         .select(
             pl.col("NCT_ID").alias("studyId"),
-            pl.col("INTERVENTION_NAME").alias("drug_name"),
+            pl.col("INTERVENTION_NAME").alias("drugFromSource"),
             "MOLREGNO",
         )
         .drop_nulls()
@@ -85,13 +85,13 @@ def extract_chembl_ct_curation(
             limit=None,
             init_client_lib_dir=oracle_client_path,
         )
-        .select(pl.col("MOLREGNO").cast(pl.Utf8), pl.col("CHEMBL_ID").alias("drug_id"))
+        .select(pl.col("MOLREGNO").cast(pl.Utf8), pl.col("CHEMBL_ID").alias("drugId"))
         .drop_nulls()
         .unique()
     )
     return (
         trial_to_drug.join(trial_to_efo, "studyId", how="full")
         .join(chembl, "MOLREGNO", how="inner")
-        .select("studyId", "drug_id", "disease_id", "drug_name", "disease_name")
+        .select("studyId", "drugId", "diseaseId", "drugFromSource", "diseaseFromSource")
         .unique()
     )
