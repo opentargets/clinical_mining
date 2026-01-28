@@ -49,7 +49,7 @@ class ClinicalSource(str, Enum):
     PMDA = "PMDA"
 
 
-class ClinicalStatusCategory(str, Enum):
+class ClinicalStageCategory(str, Enum):
     """Standardised clinical development status categories, ranked by development stage."""
 
     APPROVED = "APPROVED"
@@ -71,57 +71,57 @@ class MappingStatus(str, Enum):
     DISEASE_MAPPED = "DISEASE_MAPPED"
     UNMAPPED = "UNMAPPED"
 
+class ClinicalReportType(str, Enum):
+    """The type of the clinical record."""
 
-class ClinicalRecordSchema(BaseModel):
-    """Represents a clinical trial and its metadata."""
+    CLINICAL_TRIAL = "CLINICAL_TRIAL"
+    DRUG_LABEL = "DRUG_LABEL"
+    REGULATORY = "REGULATORY_AGENCY"
+    CURATED_RESOURCE = "CURATED_RESOURCE"
+
+class AssociatedDrug(BaseModel):
+
+    drugFromSource: str = Field(..., description="The drug label used at the source.")
+    drugId: str | None = Field(..., description="The assigned drug ID.")
+
+class AssociatedDisease(BaseModel):
+
+    diseaseFromSource: str = Field(..., description="The disease label used at the source.")
+    diseaseId: str | None = Field(..., description="The assigned disease ID.")
+
+class ClinicalReportSchema(BaseModel):
+    """Represents a clinical record and its metadata."""
 
     model_config = ConfigDict(extra="allow")
 
-    studyId: str = Field(..., description="The study identifier, e.g. NCT04012606.")
-    url: str = Field(
-        default=None, description="The URL of the study, e.g. in Dailymed."
+    id: str = Field(..., description="The identifier for the clinical reference, e.g. NCT04012606.")
+    clinicalStage: ClinicalStageCategory = Field(
+        description="The clinical development status of the clinical reference after harmonisation .",
     )
-    source: ClinicalSource | None = Field(
-        default=None, description="The data source of the study."
+    phaseFromSource: str | None = Field(
+        default=None, description="The phase of the report at the source."
     )
-
-
-class ClinicalEvidenceSchema(BaseModel):
-    """Represents a single piece of evidence linking a drug to an indication from a source."""
-
-    model_config = ConfigDict(extra="allow")
-
-    id: str = Field(
-        description="Hashed identifier based on drug and disease names and studyId"
+    type: ClinicalReportType = Field(
+        default=None, description="The type of the report."
     )
-    drugName: str = Field(
-        description="Drug name (ChEMBL ID if mapping is available, otherwise label from clinical source)"
+    url: str | None = Field(
+        default=None, description="The URL of the report, e.g. in Dailymed."
     )
-    diseaseName: str = Field(
-        description="Disease name (EFO ID if mapping is available, otherwise label from clinical source)"
+    source: ClinicalSource = Field(
+        default=None, description="The data source of the report."
     )
-    studyId: str = Field(
-        description="The study identifier that supports the drug/indication relationship.",
+    diseases: list[AssociatedDisease] = Field(
+        default=None, description="The diseases associated with the report."
     )
-
-    source: ClinicalSource = Field(..., description="The data source of the evidence.")
-    drugFromSource: str | None = Field(
-        default=None, description="The name of the drug."
+    drugs: list[AssociatedDrug] = Field(
+        default=None, description="The drugs associated with the study."
     )
-    diseaseFromSource: str | None = Field(
-        default=None, description="The name of the disease."
-    )
-    drugId: str | None = Field(
-        default=None,
-        description="The ChEMBL ID corresponding to the drug.",
-    )
-    diseaseId: str | None = Field(
-        default=None, description="The EFO ID corresponding to the disease."
-    )
-    clinicalStatus: ClinicalStatusCategory = Field(
-        description="The clinical development status of the drug/indication relationship.",
+    hasExpertReview: bool = Field(
+        default=False,
+        description="Whether the report has been reviewed by an expert.",
     )
 
+   # + optional trial metadata fields with the `trial` prefix. E.g. trialDescription
 
 class ClinicalIndicationSchema(BaseModel):
     """Aggregated drug-indication relationship with multiple supporting sources."""
@@ -144,13 +144,17 @@ class ClinicalIndicationSchema(BaseModel):
     diseaseId: str | None = Field(
         default=None, description="The EFO ID corresponding to the disease."
     )
-    sources: list[ClinicalEvidenceSchema] = Field(
-        ...,
-        description="List of studies and their metadata that supports the association.",
-    )
-    maxClinicalStatus: ClinicalStatusCategory = Field(
+    maxClinicalStage: ClinicalStageCategory = Field(
         description="The maximum clinical development status (MCDS) of the drug/indication relationship.",
     )
     mappingStatus: MappingStatus = Field(
         description="The mapping status of the drug/indication relationship.",
+    )
+    clinicalReportIds: list[str] = Field(
+        ...,
+        description="List of clinical report IDs that support the association.",
+    )
+    hasExpertReview: bool = Field(
+        default=False,
+        description="True if any of the supporting clinical reports has been reviewed by an expert.",
     )

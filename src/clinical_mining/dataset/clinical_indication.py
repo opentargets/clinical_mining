@@ -6,91 +6,91 @@ from clinical_mining.schemas import (
     validate_schema,
     ClinicalEvidenceSchema,
     ClinicalIndicationSchema,
-    ClinicalStatusCategory,
+    ClinicalStageCategory,
 )
 from clinical_mining.utils.polars_helpers import coalesce_column
 
 # Clinical status harmonization constants
 PHASE_TO_CATEGORY_MAP = {
     # APPROVED (Rank 1)
-    "approved": ClinicalStatusCategory.APPROVED,
-    "authorised": ClinicalStatusCategory.APPROVED,
-    "approved (orphan drug)": ClinicalStatusCategory.APPROVED,
-    "approved in china": ClinicalStatusCategory.APPROVED,
-    "approved in eu": ClinicalStatusCategory.APPROVED,
-    "opinion": ClinicalStatusCategory.APPROVED,
+    "approved": ClinicalStageCategory.APPROVED,
+    "authorised": ClinicalStageCategory.APPROVED,
+    "approved (orphan drug)": ClinicalStageCategory.APPROVED,
+    "approved in china": ClinicalStageCategory.APPROVED,
+    "approved in eu": ClinicalStageCategory.APPROVED,
+    "opinion": ClinicalStageCategory.APPROVED,
     # POST_APPROVAL_WITHDRAWN (Rank 2)
-    "withdrawn": ClinicalStatusCategory.POST_APPROVAL_WITHDRAWN,
-    "withdrawn from market": ClinicalStatusCategory.POST_APPROVAL_WITHDRAWN,
-    "revoked": ClinicalStatusCategory.POST_APPROVAL_WITHDRAWN,
-    "expired": ClinicalStatusCategory.POST_APPROVAL_WITHDRAWN,
-    "lapsed": ClinicalStatusCategory.POST_APPROVAL_WITHDRAWN,
-    "suspended": ClinicalStatusCategory.POST_APPROVAL_WITHDRAWN,
+    "withdrawn": ClinicalStageCategory.POST_APPROVAL_WITHDRAWN,
+    "withdrawn from market": ClinicalStageCategory.POST_APPROVAL_WITHDRAWN,
+    "revoked": ClinicalStageCategory.POST_APPROVAL_WITHDRAWN,
+    "expired": ClinicalStageCategory.POST_APPROVAL_WITHDRAWN,
+    "lapsed": ClinicalStageCategory.POST_APPROVAL_WITHDRAWN,
+    "suspended": ClinicalStageCategory.POST_APPROVAL_WITHDRAWN,
     # REGULATORY_REVIEW (Rank 3)
-    "application submitted": ClinicalStatusCategory.REGULATORY_REVIEW,
-    "approval submitted": ClinicalStatusCategory.REGULATORY_REVIEW,
-    "nda filed": ClinicalStatusCategory.REGULATORY_REVIEW,
-    "bla submitted": ClinicalStatusCategory.REGULATORY_REVIEW,
-    "ind submitted": ClinicalStatusCategory.REGULATORY_REVIEW,
-    "opinion under re-examination": ClinicalStatusCategory.REGULATORY_REVIEW,
+    "application submitted": ClinicalStageCategory.REGULATORY_REVIEW,
+    "approval submitted": ClinicalStageCategory.REGULATORY_REVIEW,
+    "nda filed": ClinicalStageCategory.REGULATORY_REVIEW,
+    "bla submitted": ClinicalStageCategory.REGULATORY_REVIEW,
+    "ind submitted": ClinicalStageCategory.REGULATORY_REVIEW,
+    "opinion under re-examination": ClinicalStageCategory.REGULATORY_REVIEW,
     # PHASE_4 (Rank 4)
-    "phase4": ClinicalStatusCategory.PHASE_4,
-    "phase 4": ClinicalStatusCategory.PHASE_4,
-    "discontinued in phase 4": ClinicalStatusCategory.PHASE_4,
+    "phase4": ClinicalStageCategory.PHASE_4,
+    "phase 4": ClinicalStageCategory.PHASE_4,
+    "discontinued in phase 4": ClinicalStageCategory.PHASE_4,
     # PHASE_3 (Rank 5)
-    "phase3": ClinicalStatusCategory.PHASE_3,
-    "phase 3": ClinicalStatusCategory.PHASE_3,
-    "phase2/phase3": ClinicalStatusCategory.PHASE_3,
-    "phase 2/3": ClinicalStatusCategory.PHASE_3,
-    "discontinued in phase 3": ClinicalStatusCategory.PHASE_3,
-    "discontinued in phase 2/3": ClinicalStatusCategory.PHASE_3,
+    "phase3": ClinicalStageCategory.PHASE_3,
+    "phase 3": ClinicalStageCategory.PHASE_3,
+    "phase2/phase3": ClinicalStageCategory.PHASE_3,
+    "phase 2/3": ClinicalStageCategory.PHASE_3,
+    "discontinued in phase 3": ClinicalStageCategory.PHASE_3,
+    "discontinued in phase 2/3": ClinicalStageCategory.PHASE_3,
     # PHASE_2 (Rank 6)
-    "phase2": ClinicalStatusCategory.PHASE_2,
-    "phase 2": ClinicalStatusCategory.PHASE_2,
-    "phase 2a": ClinicalStatusCategory.PHASE_2,
-    "phase 2b": ClinicalStatusCategory.PHASE_2,
-    "phase1/phase2": ClinicalStatusCategory.PHASE_2,
-    "phase 1/2": ClinicalStatusCategory.PHASE_2,
-    "phase 1b/2a": ClinicalStatusCategory.PHASE_2,
-    "phase 1/2a": ClinicalStatusCategory.PHASE_2,
-    "discontinued in phase 2": ClinicalStatusCategory.PHASE_2,
-    "discontinued in phase 1/2": ClinicalStatusCategory.PHASE_2,
-    "discontinued in phase 2a": ClinicalStatusCategory.PHASE_2,
-    "discontinued in phase 2b": ClinicalStatusCategory.PHASE_2,
+    "phase2": ClinicalStageCategory.PHASE_2,
+    "phase 2": ClinicalStageCategory.PHASE_2,
+    "phase 2a": ClinicalStageCategory.PHASE_2,
+    "phase 2b": ClinicalStageCategory.PHASE_2,
+    "phase1/phase2": ClinicalStageCategory.PHASE_2,
+    "phase 1/2": ClinicalStageCategory.PHASE_2,
+    "phase 1b/2a": ClinicalStageCategory.PHASE_2,
+    "phase 1/2a": ClinicalStageCategory.PHASE_2,
+    "discontinued in phase 2": ClinicalStageCategory.PHASE_2,
+    "discontinued in phase 1/2": ClinicalStageCategory.PHASE_2,
+    "discontinued in phase 2a": ClinicalStageCategory.PHASE_2,
+    "discontinued in phase 2b": ClinicalStageCategory.PHASE_2,
     # PHASE_1 (Rank 7)
-    "phase1": ClinicalStatusCategory.PHASE_1,
-    "phase 1": ClinicalStatusCategory.PHASE_1,
-    "phase 1b": ClinicalStatusCategory.PHASE_1,
-    "early_phase1": ClinicalStatusCategory.PHASE_1,
-    "phase 0": ClinicalStatusCategory.PHASE_1,
-    "discontinued in phase 1": ClinicalStatusCategory.PHASE_1,
+    "phase1": ClinicalStageCategory.PHASE_1,
+    "phase 1": ClinicalStageCategory.PHASE_1,
+    "phase 1b": ClinicalStageCategory.PHASE_1,
+    "early_phase1": ClinicalStageCategory.PHASE_1,
+    "phase 0": ClinicalStageCategory.PHASE_1,
+    "discontinued in phase 1": ClinicalStageCategory.PHASE_1,
     # PRECLINICAL (Rank 8)
-    "preclinical": ClinicalStatusCategory.PRECLINICAL,
-    "patented": ClinicalStatusCategory.PRECLINICAL,
+    "preclinical": ClinicalStageCategory.PRECLINICAL,
+    "patented": ClinicalStageCategory.PRECLINICAL,
     # NO_DEVELOPMENT_REPORTED (Rank 9)
-    "investigative": ClinicalStatusCategory.NO_DEVELOPMENT_REPORTED,
-    "clinical trial": ClinicalStatusCategory.NO_DEVELOPMENT_REPORTED,
-    "registered": ClinicalStatusCategory.NO_DEVELOPMENT_REPORTED,
-    "preregistration": ClinicalStatusCategory.NO_DEVELOPMENT_REPORTED,
-    "terminated": ClinicalStatusCategory.NO_DEVELOPMENT_REPORTED,
-    "discontinued in preregistration": ClinicalStatusCategory.NO_DEVELOPMENT_REPORTED,
-    "application withdrawn": ClinicalStatusCategory.NO_DEVELOPMENT_REPORTED,
-    "refused": ClinicalStatusCategory.NO_DEVELOPMENT_REPORTED,
-    "withdrawn from rolling review": ClinicalStatusCategory.NO_DEVELOPMENT_REPORTED,
-    "NA": ClinicalStatusCategory.NO_DEVELOPMENT_REPORTED,
+    "investigative": ClinicalStageCategory.NO_DEVELOPMENT_REPORTED,
+    "clinical trial": ClinicalStageCategory.NO_DEVELOPMENT_REPORTED,
+    "registered": ClinicalStageCategory.NO_DEVELOPMENT_REPORTED,
+    "preregistration": ClinicalStageCategory.NO_DEVELOPMENT_REPORTED,
+    "terminated": ClinicalStageCategory.NO_DEVELOPMENT_REPORTED,
+    "discontinued in preregistration": ClinicalStageCategory.NO_DEVELOPMENT_REPORTED,
+    "application withdrawn": ClinicalStageCategory.NO_DEVELOPMENT_REPORTED,
+    "refused": ClinicalStageCategory.NO_DEVELOPMENT_REPORTED,
+    "withdrawn from rolling review": ClinicalStageCategory.NO_DEVELOPMENT_REPORTED,
+    "NA": ClinicalStageCategory.NO_DEVELOPMENT_REPORTED,
 }
 
 # Category ranking for Maximum Clinical Development Status
 CATEGORY_RANKS = {
-    ClinicalStatusCategory.APPROVED: 1,
-    ClinicalStatusCategory.POST_APPROVAL_WITHDRAWN: 2,
-    ClinicalStatusCategory.REGULATORY_REVIEW: 3,
-    ClinicalStatusCategory.PHASE_4: 4,
-    ClinicalStatusCategory.PHASE_3: 5,
-    ClinicalStatusCategory.PHASE_2: 6,
-    ClinicalStatusCategory.PHASE_1: 7,
-    ClinicalStatusCategory.PRECLINICAL: 8,
-    ClinicalStatusCategory.NO_DEVELOPMENT_REPORTED: 9,
+    ClinicalStageCategory.APPROVED: 1,
+    ClinicalStageCategory.POST_APPROVAL_WITHDRAWN: 2,
+    ClinicalStageCategory.REGULATORY_REVIEW: 3,
+    ClinicalStageCategory.PHASE_4: 4,
+    ClinicalStageCategory.PHASE_3: 5,
+    ClinicalStageCategory.PHASE_2: 6,
+    ClinicalStageCategory.PHASE_1: 7,
+    ClinicalStageCategory.PRECLINICAL: 8,
+    ClinicalStageCategory.NO_DEVELOPMENT_REPORTED: 9,
 }
 
 CATEGORY_RANKS_STR = {k.value: v for k, v in CATEGORY_RANKS.items()}
@@ -100,7 +100,7 @@ RANK_TO_CATEGORY_STR = {v: k.value for k, v in CATEGORY_RANKS.items()}
 APPROVED_SOURCES = {"ATC", "EMA", "FDA", "DailyMed", "PMDA"}
 
 
-def map_phase_to_category(phase: str | None, source: str) -> ClinicalStatusCategory:
+def map_phase_to_category(phase: str | None, source: str) -> ClinicalStageCategory:
     """Map original phase value to standardised category.
 
     Args:
@@ -113,15 +113,15 @@ def map_phase_to_category(phase: str | None, source: str) -> ClinicalStatusCateg
     if phase is None:
         # Handle null values based on source
         if source in APPROVED_SOURCES:
-            return ClinicalStatusCategory.APPROVED
+            return ClinicalStageCategory.APPROVED
         else:
-            return ClinicalStatusCategory.NO_DEVELOPMENT_REPORTED
+            return ClinicalStageCategory.NO_DEVELOPMENT_REPORTED
 
     # Handle case-insensitive mapping
     phase_lower = phase.lower() if isinstance(phase, str) else str(phase).lower()
 
     return PHASE_TO_CATEGORY_MAP.get(
-        phase_lower, ClinicalStatusCategory.NO_DEVELOPMENT_REPORTED
+        phase_lower, ClinicalStageCategory.NO_DEVELOPMENT_REPORTED
     )
 
 
@@ -150,11 +150,11 @@ class ClinicalEvidence:
                         r.get("clinicalPhase"), r.get("source")
                     ).value
                 )
-                .alias("clinicalStatus")
+                .alias("clinicalStage")
             )
         else:
             df = df.with_columns(
-                clinicalStatus=pl.lit(ClinicalStatusCategory.NO_DEVELOPMENT_REPORTED)
+                clinicalStage=pl.lit(ClinicalStageCategory.NO_DEVELOPMENT_REPORTED)
             )
 
         self.df = validate_schema(df, ClinicalEvidenceSchema)
@@ -255,17 +255,17 @@ class ClinicalIndication:
                 sources_list = sources_list.to_list()
 
             # Extract all clinical statuses from sources and find the best rank
-            best_rank = CATEGORY_RANKS[ClinicalStatusCategory.NO_DEVELOPMENT_REPORTED]
-            best_category = ClinicalStatusCategory.NO_DEVELOPMENT_REPORTED
+            best_rank = CATEGORY_RANKS[ClinicalStageCategory.NO_DEVELOPMENT_REPORTED]
+            best_category = ClinicalStageCategory.NO_DEVELOPMENT_REPORTED
 
             for source in sources_list:
-                status_str = source.get("clinicalStatus")
+                status_str = source.get("clinicalStage")
                 if status_str:
                     rank = CATEGORY_RANKS_STR.get(
                         status_str,
-                        CATEGORY_RANKS[ClinicalStatusCategory.NO_DEVELOPMENT_REPORTED],
+                        CATEGORY_RANKS[ClinicalStageCategory.NO_DEVELOPMENT_REPORTED],
                     )
-                    category = ClinicalStatusCategory(status_str)
+                    category = ClinicalStageCategory(status_str)
                 else:
                     phase = source.get("clinicalPhase")
                     source_name = source.get("source")
@@ -273,7 +273,7 @@ class ClinicalIndication:
                         category = map_phase_to_category(phase, source_name)
                         rank = CATEGORY_RANKS[category]
                     else:
-                        category = ClinicalStatusCategory.NO_DEVELOPMENT_REPORTED
+                        category = ClinicalStageCategory.NO_DEVELOPMENT_REPORTED
                         rank = CATEGORY_RANKS[category]
 
                 # Lower rank number = higher priority
@@ -285,7 +285,7 @@ class ClinicalIndication:
 
         # Apply MCDS logic to each drug-indication pair
         self.df = self.df.with_columns(
-            maxClinicalStatus=pl.col("sources").map_elements(
+            maxClinicalStage=pl.col("sources").map_elements(
                 get_max_clinical_status, return_dtype=pl.String
             )
         )
