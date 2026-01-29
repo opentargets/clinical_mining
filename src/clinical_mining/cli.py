@@ -54,7 +54,11 @@ def main(cfg: DictConfig) -> pl.DataFrame:
     # Run pipeline sections
     for section in ["setup", "generate", "post_process"]:
         logger.info(f"\n----- Running {section.upper()} section -----")
-        for step in cfg.pipeline.get(section, []):
+        steps = cfg.pipeline.get(section, [])
+        if not steps:
+            logger.info(f"No steps found in {section} section, skipping...")
+            continue
+        for step in steps:
             logger.info(f"Executing step: {step.name}")
             execute_step(step, data_store)
 

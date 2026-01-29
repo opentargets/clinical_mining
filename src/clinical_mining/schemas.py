@@ -110,10 +110,10 @@ class ClinicalReportSchema(BaseModel):
     source: ClinicalSource = Field(
         default=None, description="The data source of the report."
     )
-    diseases: list[AssociatedDisease] = Field(
+    diseases: list[AssociatedDisease] | None = Field(
         default=None, description="The diseases associated with the report."
     )
-    drugs: list[AssociatedDrug] = Field(
+    drugs: list[AssociatedDrug] | None = Field(
         default=None, description="The drugs associated with the study."
     )
     hasExpertReview: bool = Field(
