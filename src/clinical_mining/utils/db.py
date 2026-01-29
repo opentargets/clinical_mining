@@ -3,7 +3,7 @@ import polars as pl
 
 
 def construct_db_uri(
-    db_type: str, db_uri: str, db_user: str | None, db_password: str | None
+    db_type: str, db_uri: str, db_user: str | None = None, db_password: str | None = None
 ):
     """Constructs a database URI from the given parameters."""
     if db_user and db_password:

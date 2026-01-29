@@ -28,22 +28,22 @@ datasets:
   ttd_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/inputs/P1-05-Drug_disease.txt # null
   ema_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/inputs/medicines-output-medicines-report_en.xlsx # null
   pmda_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/inputs/pmda_approvals.pdf # null
-  output_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/outputs/clinical_precedence # ???
+  output_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/outputs/clinical_report # ???
 
 # Input Data Sources - Each key becomes the name of a DataFrame available to the pipeline steps.
 inputs:
-  chembl_curation:
-    format: parquet
-    path: /Users/irenelopez/EBI/repos/clinical_mining/data/outputs/chembl_indications/2101.parquet
-  chembl_indications_raw:
-    format: json
-    path: ${datasets.chembl_indications_path}
-  molecule_index_spark:
-    format: parquet
-    path: ${datasets.molecule_index_path}
-  disease_index_spark:
-    format: parquet
-    path: ${datasets.disease_index_path}
+  # chembl_curation:
+  #   format: parquet
+  #   path: /Users/irenelopez/EBI/repos/clinical_mining/data/outputs/chembl_indications/2101.parquet
+  # chembl_indications_raw:
+  #   format: json
+  #   path: ${datasets.chembl_indications_path}
+  # molecule_index_spark:
+  #   format: parquet
+  #   path: ${datasets.molecule_index_path}
+  # disease_index_spark:
+  #   format: parquet
+  #   path: ${datasets.disease_index_path}
 
   studies:
     format: db_table
@@ -114,78 +114,35 @@ pipeline:
     #     db_user: ${db_properties.chembl.user}
     #     db_password: ${db_properties.chembl.password}
     #     oracle_client_path: ${db_properties.chembl.oracle_client_path}
-    - name: trials
-      function: clinical_mining.data_sources.aact.extract_clinical_record
+
+  # GENERATE: Steps that generate the core drug/indication DataFrames.
+  generate:
+    - name: aact_report
+      function: clinical_mining.data_sources.aact.extract_clinical_report
       parameters:
         studies: $studies
+        interventions: $interventions
+        conditions: $conditions
         additional_metadata: ['$study_references', '$designs', '$brief_summaries']
         aggregation_specs: 
           pmid: 
             group_by: nct_id
             alias: literature
 
-  # GENERATE: Steps that generate the core drug/indication DataFrames.
-  generate:
-    - name: aact_indications
-      function: clinical_mining.data_sources.aact.extract_clinical_indication
-      parameters:
-        interventions: $interventions
-        conditions: $conditions
-    - name: chembl_indications
-      function: clinical_mining.data_sources.chembl.indications.extract_clinical_indication
-      parameters:
-        raw_indications: $chembl_indications_raw
-        exclude_trials: true
-    - name: ttd_indications
-      function: clinical_mining.data_sources.ttd.extract_clinical_indication
-      parameters:
-        indications_path: ${datasets.ttd_path}
-    - name: ema_indications
-      function: clinical_mining.data_sources.ema.extract_clinical_indication
-      parameters:
-        indications_path: ${datasets.ema_path}
-        spark: $spark_session
-    - name: pmda_raw
-      function: clinical_mining.data_sources.pmda.parse_pmda_approvals
-      parameters:
-        pmda_path: ${datasets.pmda_path}
-    - name: pmda_indications
-      function: clinical_mining.data_sources.pmda.extract_clinical_indication
-      parameters:
-        df: $pmda_raw
-        spark: $spark_session
-
   # POST-PROCESS: Final transformation steps that run sequentially on the unified `indications` DataFrame.
   post_process:
-    - name: indications
+    - name: output_clinical_report
       function: clinical_mining.utils.polars_helpers.union_dfs
       parameters:
-        dfs: [$aact_indications, $chembl_indications, $ttd_indications, $ema_indications, $pmda_indications]
-    - name: indications_w_metadata
-      function: clinical_mining.utils.polars_helpers.join_dfs
-      parameters:
-        dfs: [$indications, $trials]
-        join_on: studyId
-        how: left
-    - name: indications_with_clinical_phase
-      function: clinical_mining.utils.polars_helpers.coalesce_column
-      parameters:
-        df: $indications_w_metadata
-        output_column_name: clinicalPhase
-        input_column_names: ["phase", "phase_right"]
-        drop: true
-    - name: output_clinical_evidence
-      function: clinical_mining.utils.mapping.map_entities
-      parameters:
-        spark: $spark_session
-        clinical_associations: $indications_with_clinical_phase
-        disease_index: $disease_index_spark
-        drug_index: $molecule_index_spark
-        chembl_curation: $chembl_curation
-        drug_column_name: drugFromSource
-        disease_column_name: diseaseFromSource
-        ner_cache_path: ".cache/ner/2025-11-03.parquet"
-    - name: output_clinical_associations
-      function: clinical_mining.dataset.ClinicalIndication.from_evidence
-      parameters:
-        evidence: $output_clinical_evidence
+        dfs: [$aact_report]
+
+      # function: clinical_mining.utils.mapping.map_entities
+      # parameters:
+      #   spark: $spark_session
+      #   clinical_associations: $indications_with_clinical_phase
+      #   disease_index: $disease_index_spark
+      #   drug_index: $molecule_index_spark
+      #   chembl_curation: $chembl_curation
+      #   drug_column_name: drugFromSource
+      #   disease_column_name: diseaseFromSource
+      #   ner_cache_path: ".cache/ner/2025-11-03.parquet"

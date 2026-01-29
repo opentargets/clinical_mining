@@ -11,7 +11,7 @@ def _get_callable(function_path: str):
 
     Supports both module-level functions and static/class methods within classes.
     Examples:
-        - Module function: 'clinical_mining.data_sources.aact.aact.extract_clinical_record'
+        - Module function: 'clinical_mining.data_sources.aact.aact.extract_clinical_report'
         - Static method: 'clinical_mining.dataset.clinical_indication.ClinicalIndication.assign_approval_status'
 
     Args:
