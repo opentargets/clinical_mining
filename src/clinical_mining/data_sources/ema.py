@@ -30,6 +30,7 @@ def extract_clinical_report(
         for series in human_indications.iter_columns()
         if series.null_count() < human_indications.height
     ]
+    logger.info("(ema): apply ner to extract diseases from therapeutic indications")
     ner_extracted_indication = (
         pl.from_pandas(
             extract_disease_entities(

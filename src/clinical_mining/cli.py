@@ -26,10 +26,6 @@ def main(cfg: DictConfig) -> pl.DataFrame:
         db_password=cfg.db_properties.aact.password,
     )
 
-    # Initialise spark one time only
-    data_store["spark_session"] = next(
-        (spark_session() for name in cfg.inputs if "spark" in name), None
-    )
     # Load all data sources
     for name, source in cfg.inputs.items():
         logger.info(f"Loading input: {name}")
@@ -41,6 +37,8 @@ def main(cfg: DictConfig) -> pl.DataFrame:
                 db_schema=cfg.db_properties.aact.schema,
             )
         elif "spark" in name:
+            if data_store.get("spark_session") is None:
+                data_store["spark_session"] = spark_session()
             data_store[name] = data_store["spark_session"].read.load(
                 source.path, format=source.format
             )
