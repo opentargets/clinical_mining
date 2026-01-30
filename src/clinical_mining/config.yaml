@@ -134,12 +134,18 @@ pipeline:
       parameters:
         indications_path: ${datasets.ttd_path}
 
+    - name: ema_report
+      function: clinical_mining.data_sources.ema.extract_clinical_report
+      parameters:
+        indications_path: ${datasets.ema_path}
+        spark: $spark_session
+
   # POST-PROCESS: Final transformation steps that run sequentially on the unified `indications` DataFrame.
   post_process:
     - name: output_clinical_report
       function: clinical_mining.utils.polars_helpers.union_dfs
       parameters:
-        dfs: [$aact_report, $ttd_report]
+        dfs: [$aact_report, $ttd_report, $ema_report]
 
       # function: clinical_mining.utils.mapping.map_entities
       # parameters:
