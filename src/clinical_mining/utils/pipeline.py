@@ -6,6 +6,40 @@ from omegaconf import ListConfig
 import polars as pl
 
 
+def _params_reference_key(params: dict, key: str) -> bool:
+    """Return True if a step's parameters reference a given data_store key.
+
+    This inspects values like `$spark_session` and also lists containing such
+    references. It is used to detect whether a step requires that dependency to
+    exist in `data_store` before parameters are resolved.
+    """
+    for _name, value in params.items():
+        if isinstance(value, str) and value == f"${key}":
+            return True
+        if isinstance(value, (list, ListConfig)):
+            for v in value:
+                if isinstance(v, str) and v == f"${key}":
+                    return True
+    return False
+
+
+def _ensure_spark_session(data_store: dict[str, any]) -> None:
+    """Ensure `data_store['spark_session']` is initialized.
+
+    Spark is created lazily, only when a pipeline step explicitly references
+    `$spark_session`.
+
+    This function is idempotent: if the session already exists in `data_store`,
+    it will be reused and no new Spark session will be created.
+    """
+    if data_store.get("spark_session") is not None:
+        return
+
+    from clinical_mining.utils.spark_helpers import spark_session
+
+    data_store["spark_session"] = spark_session()
+
+
 def _get_callable(function_path: str):
     """Imports a function or static method from a string path.
 
@@ -76,7 +110,11 @@ def execute_step(
         any: The result of the step execution.
     """
     func = _get_callable(step.function)
-    params = _resolve_params(step.get("parameters", {}), data_store)
+    step_params = step.get("parameters", {})
+    if _params_reference_key(step_params, "spark_session"):
+        _ensure_spark_session(data_store)
+
+    params = _resolve_params(step_params, data_store)
 
     result = func(**params)
     if not isinstance(result, pl.DataFrame) and hasattr(result, "df"):
