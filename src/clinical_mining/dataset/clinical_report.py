@@ -1,6 +1,7 @@
 import polars as pl
 
 from clinical_mining.schemas import validate_schema, ClinicalReportSchema, ClinicalStageCategory, snake_to_camel
+from clinical_mining.dataset.clinical_indication import CATEGORY_RANKS_STR
 
 # Clinical status harmonization constants
 PHASE_TO_CATEGORY_MAP = {
@@ -119,4 +120,22 @@ class ClinicalReport:
             )
         )
 
+        # Drop duplicates by id, keeping the row with the best clinical stage
+        df = self.drop_duplicates(df)
+
         self.df = validate_schema(df, ClinicalReportSchema)
+
+    @classmethod
+    def drop_duplicates(cls, df: pl.DataFrame) -> pl.DataFrame:
+        """Drop duplicate reports based on clinical stage."""
+        return (
+            df.with_columns(
+                clinicalStageRank=pl.col("clinicalStage").replace_strict(
+                    CATEGORY_RANKS_STR,
+                    default=CATEGORY_RANKS_STR[ClinicalStageCategory.NO_DEVELOPMENT_REPORTED.value],
+                )
+            )
+            .sort(["id", "clinicalStageRank"])
+            .unique(subset=["id"], keep="first")
+            .drop("clinicalStageRank")
+        )
