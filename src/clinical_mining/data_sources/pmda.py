@@ -8,7 +8,9 @@ from ontoma.ner.disease import extract_disease_entities
 from clinical_mining.utils.polars_helpers import convert_polars_to_spark
 
 from clinical_mining.utils.spark_helpers import spark_session
-from clinical_mining.dataset.clinical_indication import ClinicalEvidence
+from clinical_mining.dataset import ClinicalReport
+from clinical_mining.schemas import ClinicalReportType
+import polars_hash as plh
 
 
 # ============================================================================
@@ -322,63 +324,82 @@ def parse_pmda_approvals(pmda_path: str) -> pl.DataFrame:
     )
 
 
-def extract_clinical_indication(
+def extract_clinical_report(
     df: pl.DataFrame,
     spark: spark_session,
-) -> ClinicalEvidence:
-    return ClinicalEvidence(
-        df=(
-            # Extract disease entities (requires Polars - Spark - Polars conversion)
-            pl.from_pandas(
-                extract_disease_entities(
-                    spark,
-                    df=convert_polars_to_spark(
-                        polars_df=(
-                            df.with_columns(
-                                disease_text=pl.col("notes")
-                                .fill_null("")
-                                .str.strip_chars()
-                            ).drop("notes")
-                        ),
-                        spark=spark,
+) -> ClinicalReport:
+    """Extract clinical reports from PMDA approvals."""
+    reports = (
+        # Extract disease entities (requires Polars - Spark - Polars conversion)
+        pl.from_pandas(
+            extract_disease_entities(
+                spark,
+                df=convert_polars_to_spark(
+                    polars_df=(
+                        df.with_columns(
+                            disease_text=pl.col("notes").fill_null("").str.strip_chars()
+                        ).drop("notes")
                     ),
-                    input_col="disease_text",
-                    output_col="extracted_diseases",
-                ).toPandas()
-            )
-            # Explode extracted diseases
-            .explode(
-                "extracted_diseases",
-                keep_nulls=False,
-            )
-            # Add active ingredients column
-            .with_columns(
-                active_ingredients=pl.col("active_ingredient")
-                .fill_null("")
-                .map_elements(clean_active_ingredients, return_dtype=pl.List(pl.Utf8)),
-            )
-            .explode("active_ingredients")
-            .select(
-                drugFromSource=pl.col("active_ingredients")
-                .str.strip_chars()
-                .str.to_lowercase(),
-                diseaseFromSource=pl.col("extracted_diseases"),
-                # Evidence ID: page_number in PDF/drugFromSource/diseaseFromSource
-                studyId=pl.concat_str(
-                    [
-                        pl.col("page_number"),
-                        pl.lit("/"),
-                        pl.col("active_ingredients")
-                        .str.strip_chars()
-                        .str.to_lowercase(),
-                        pl.lit("/"),
-                        pl.col("extracted_diseases"),
-                    ]
+                    spark=spark,
                 ),
-                phase=pl.lit("approved"),
-                source=pl.lit("PMDA"),
+                input_col="disease_text",
+                output_col="extracted_diseases",
+            ).toPandas()
+        )
+        # Explode extracted diseases
+        .explode(
+            "extracted_diseases",
+            keep_nulls=False,
+        )
+        # Add active ingredients column
+        .with_columns(
+            active_ingredients=pl.col("active_ingredient")
+            .fill_null("")
+            .map_elements(clean_active_ingredients, return_dtype=pl.List(pl.Utf8)),
+        )
+        .explode("active_ingredients")
+        .filter(
+            (pl.col("active_ingredients") != "") & (pl.col("extracted_diseases") != "")
+        )
+        .select(
+            phaseFromSource=pl.lit("approval"),
+            type=pl.lit(ClinicalReportType.REGULATORY),
+            drugFromSource=pl.col("active_ingredients")
+            .str.strip_chars()
+            .str.to_lowercase(),
+            diseaseFromSource=pl.col("extracted_diseases"),
+            hasExpertReview=pl.lit(False),
+            url=pl.lit(
+                "https://www.pmda.go.jp/english/review-services/reviews/approved-information/drugs/0001.html"
+            ),
+            source=pl.lit("PMDA"),
+        )
+        .with_columns(
+            id=plh.concat_str("drugFromSource", "diseaseFromSource").chash.sha2_256(),
+        )
+        .unique()
+    )
+
+    mapped_reports = (
+        # TODO: call mapping function
+        reports.with_columns(
+            disease=pl.struct(
+                pl.col("diseaseFromSource"), pl.lit("CHEMBL_TO_DO").alias("diseaseId")
+            ),
+            drug=pl.struct(
+                pl.col("drugFromSource"), pl.lit("EFO_TO_DO").alias("drugId")
+            ),
+        )
+        .drop(["diseaseFromSource", "drugFromSource"])
+        .unique()
+    )
+    return ClinicalReport(
+        df=(
+            mapped_reports.group_by(
+                [c for c in mapped_reports.columns if c not in ["disease", "drug"]]
+            ).agg(
+                pl.col("disease").unique().alias("diseases"),
+                pl.col("drug").unique().alias("drugs"),
             )
-            .filter((pl.col("drugFromSource") != "") & (pl.col("diseaseFromSource") != ""))
-            .unique()
         )
     )

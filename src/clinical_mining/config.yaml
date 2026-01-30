@@ -115,6 +115,11 @@ pipeline:
     #     db_password: ${db_properties.chembl.password}
     #     oracle_client_path: ${db_properties.chembl.oracle_client_path}
 
+    - name: pmda_raw
+      function: clinical_mining.data_sources.pmda.parse_pmda_approvals
+      parameters:
+        pmda_path: ${datasets.pmda_path}
+
   # GENERATE: Steps that generate the core drug/indication DataFrames.
   generate:
     - name: aact_report
@@ -140,12 +145,18 @@ pipeline:
         indications_path: ${datasets.ema_path}
         spark: $spark_session
 
+    - name: pmda_report
+      function: clinical_mining.data_sources.pmda.extract_clinical_report
+      parameters:
+        df: $pmda_raw
+        spark: $spark_session
+
   # POST-PROCESS: Final transformation steps that run sequentially on the unified `indications` DataFrame.
   post_process:
     - name: output_clinical_report
       function: clinical_mining.utils.polars_helpers.union_dfs
       parameters:
-        dfs: [$aact_report, $ttd_report, $ema_report]
+        dfs: [$aact_report, $ttd_report, $ema_report, $pmda_report]
 
       # function: clinical_mining.utils.mapping.map_entities
       # parameters:
