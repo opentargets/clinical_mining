@@ -364,10 +364,15 @@ def extract_clinical_report(
         .select(
             phaseFromSource=pl.lit("approval"),
             type=pl.lit(ClinicalReportType.REGULATORY),
-            drugFromSource=pl.col("active_ingredients")
-            .str.strip_chars()
-            .str.to_lowercase(),
-            diseaseFromSource=pl.col("extracted_diseases"),
+            drug=pl.struct(
+                pl.col("active_ingredients")
+                .str.strip_chars()
+                .str.to_lowercase()
+                .alias("drugFromSource")
+            ),
+            disease=pl.struct(
+                pl.col("extracted_diseases").alias("diseaseFromSource")
+            ),
             hasExpertReview=pl.lit(False),
             url=pl.lit(
                 "https://www.pmda.go.jp/english/review-services/reviews/approved-information/drugs/0001.html"
@@ -375,28 +380,18 @@ def extract_clinical_report(
             source=pl.lit("PMDA"),
         )
         .with_columns(
-            id=plh.concat_str("drugFromSource", "diseaseFromSource").chash.sha2_256(),
+            id=plh.concat_str(
+                pl.col("drug").struct.field("drugFromSource"),
+                pl.col("disease").struct.field("diseaseFromSource"),
+            ).chash.sha2_256()
         )
         .unique()
     )
 
-    mapped_reports = (
-        # TODO: call mapping function
-        reports.with_columns(
-            disease=pl.struct(
-                pl.col("diseaseFromSource"), pl.lit("CHEMBL_TO_DO").alias("diseaseId")
-            ),
-            drug=pl.struct(
-                pl.col("drugFromSource"), pl.lit("EFO_TO_DO").alias("drugId")
-            ),
-        )
-        .drop(["diseaseFromSource", "drugFromSource"])
-        .unique()
-    )
     return ClinicalReport(
         df=(
-            mapped_reports.group_by(
-                [c for c in mapped_reports.columns if c not in ["disease", "drug"]]
+            reports.group_by(
+                [c for c in reports.columns if c not in ["disease", "drug"]]
             ).agg(
                 pl.col("disease").unique().alias("diseases"),
                 pl.col("drug").unique().alias("drugs"),

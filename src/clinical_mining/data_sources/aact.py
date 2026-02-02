@@ -112,26 +112,16 @@ def extract_clinical_report(
             hasExpertReview=pl.lit(False),
             type=pl.lit(ClinicalReportType.CLINICAL_TRIAL),
             phaseFromSource=pl.col("trial_phase"),
-        )
-        .unique()
-    )
-    mapped_reports = (
-        # TODO: call mapping function
-        reports.with_columns(
-            disease=pl.struct(
-                pl.col("diseaseFromSource"), pl.lit("CHEMBL_TO_DO").alias("diseaseId")
-            ),
-            drug=pl.struct(
-                pl.col("drugFromSource"), pl.lit("EFO_TO_DO").alias("drugId")
-            ),
+            disease=pl.struct(pl.col("diseaseFromSource")),
+            drug=pl.struct(pl.col("drugFromSource")),
         )
         .drop(["diseaseFromSource", "drugFromSource"])
         .unique()
     )
     return ClinicalReport(
         df=(
-            mapped_reports.group_by(
-                [c for c in mapped_reports.columns if c not in ["disease", "drug"]]
+            reports.group_by(
+                [c for c in reports.columns if c not in ["disease", "drug"]]
             ).agg(
                 pl.col("disease").unique().alias("diseases"),
                 pl.col("drug").unique().alias("drugs"),
