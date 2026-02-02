@@ -32,18 +32,18 @@ datasets:
 
 # Input Data Sources - Each key becomes the name of a DataFrame available to the pipeline steps.
 inputs:
-  # chembl_curation:
-  #   format: parquet
-  #   path: /Users/irenelopez/EBI/repos/clinical_mining/data/outputs/chembl_indications/2101.parquet
+  chembl_curation:
+    format: parquet
+    path: /Users/irenelopez/EBI/repos/clinical_mining/data/outputs/chembl_indications/2101.parquet
   # chembl_indications_raw:
   #   format: json
   #   path: ${datasets.chembl_indications_path}
-  # molecule_index_spark:
-  #   format: parquet
-  #   path: ${datasets.molecule_index_path}
-  # disease_index_spark:
-  #   format: parquet
-  #   path: ${datasets.disease_index_path}
+  molecule_index_spark:
+    format: parquet
+    path: ${datasets.molecule_index_path}
+  disease_index_spark:
+    format: parquet
+    path: ${datasets.disease_index_path}
 
   studies:
     format: db_table
@@ -153,18 +153,22 @@ pipeline:
 
   # POST-PROCESS: Final transformation steps that run sequentially on the unified `indications` DataFrame.
   post_process:
-    - name: output_clinical_report
+
+    - name: all_reports
       function: clinical_mining.utils.polars_helpers.union_dfs
       parameters:
         dfs: [$aact_report, $ttd_report, $ema_report, $pmda_report]
 
-      # function: clinical_mining.utils.mapping.map_entities
-      # parameters:
-      #   spark: $spark_session
-      #   clinical_associations: $indications_with_clinical_phase
-      #   disease_index: $disease_index_spark
-      #   drug_index: $molecule_index_spark
-      #   chembl_curation: $chembl_curation
-      #   drug_column_name: drugFromSource
-      #   disease_column_name: diseaseFromSource
-      #   ner_cache_path: ".cache/ner/2025-11-03.parquet"
+    - name: output_clinical_report
+      function: clinical_mining.dataset.ClinicalReport.map_entities
+      parameters:
+        spark: $spark_session
+        reports: $all_reports
+        disease_index: $disease_index_spark
+        drug_index: $molecule_index_spark
+        chembl_curation: $chembl_curation
+        drug_column_name: drugFromSource
+        disease_column_name: diseaseFromSource
+        ner_extract_drug: true
+        ner_batch_size: 256
+        ner_cache_path: ".cache/ner/2025-11-03.parquet"

@@ -1,7 +1,14 @@
 import polars as pl
 
-from clinical_mining.schemas import validate_schema, ClinicalReportSchema, ClinicalStageCategory, snake_to_camel
+from clinical_mining.schemas import (
+    validate_schema,
+    ClinicalReportSchema,
+    ClinicalStageCategory,
+    snake_to_camel,
+)
 from clinical_mining.dataset.clinical_indication import CATEGORY_RANKS_STR
+from clinical_mining.utils.mapping import map_entities
+from pyspark.sql import DataFrame, SparkSession
 
 # Clinical status harmonization constants
 PHASE_TO_CATEGORY_MAP = {
@@ -108,15 +115,15 @@ class ClinicalReport:
     def __init__(self, df: pl.DataFrame):
         """Initialises the dataset, validating and aligning the DataFrame."""
         # Harmonise column names from snake to camel case
-        df = df.rename(
-            {col: snake_to_camel(col) for col in df.columns}
-        )
+        df = df.rename({col: snake_to_camel(col) for col in df.columns})
 
         # Assign clinical stage
         df = df.with_columns(
             clinicalStage=pl.struct(["phaseFromSource", "source"]).map_elements(
-                lambda row: map_phase_to_category(row["phaseFromSource"], row["source"]),
-                return_dtype=pl.String
+                lambda row: map_phase_to_category(
+                    row["phaseFromSource"], row["source"]
+                ),
+                return_dtype=pl.String,
             )
         )
 
@@ -132,10 +139,69 @@ class ClinicalReport:
             df.with_columns(
                 clinicalStageRank=pl.col("clinicalStage").replace_strict(
                     CATEGORY_RANKS_STR,
-                    default=CATEGORY_RANKS_STR[ClinicalStageCategory.NO_DEVELOPMENT_REPORTED.value],
+                    default=CATEGORY_RANKS_STR[
+                        ClinicalStageCategory.NO_DEVELOPMENT_REPORTED.value
+                    ],
                 )
             )
             .sort(["id", "clinicalStageRank"])
             .unique(subset=["id"], keep="first")
             .drop("clinicalStageRank")
+        )
+
+    @classmethod
+    def map_entities(
+        cls,
+        spark: SparkSession,
+        reports: pl.DataFrame,
+        disease_index: DataFrame,
+        drug_index: DataFrame,
+        chembl_curation: pl.DataFrame,
+        drug_column_name: str,
+        disease_column_name: str,
+        drug_id_column_name: str = "drugId",
+        disease_id_column_name: str = "diseaseId",
+        ner_extract_drug: bool = True,
+        ner_batch_size: int = 256,
+        ner_cache_path: str | None = None,
+    ) -> "ClinicalReport":
+        """Map entities to IDs."""
+        # Explode clinical reports to get lists of study/disease/drug
+        exploded_reports = (
+            reports.explode("drugs").explode("diseases").unnest(["drugs", "diseases"])
+        )
+
+        mapped_exploded_reports = map_entities(
+            spark,
+            exploded_reports,
+            disease_index,
+            drug_index,
+            chembl_curation,
+            drug_column_name,
+            disease_column_name,
+            drug_id_column_name,
+            disease_id_column_name,
+            ner_extract_drug,
+            ner_batch_size,
+            ner_cache_path,
+        )
+
+        mapped_reports = (
+            mapped_exploded_reports.with_columns(
+                disease=pl.struct(pl.col("diseaseFromSource"), pl.col("diseaseId")),
+                drug=pl.struct(pl.col("drugFromSource"), pl.col("drugId")),
+            )
+            .drop(["diseaseFromSource", "drugFromSource", "diseaseId", "drugId"])
+            .unique()
+        )
+
+        return ClinicalReport(
+            df=(
+                mapped_reports.group_by(
+                    [c for c in mapped_reports.columns if c not in ["disease", "drug"]]
+                ).agg(
+                    pl.col("disease").unique().alias("diseases"),
+                    pl.col("drug").unique().alias("drugs"),
+                )
+            )
         )

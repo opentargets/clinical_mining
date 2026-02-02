@@ -83,18 +83,9 @@ def extract_clinical_report(
             pl.col("drugFromSource").is_not_null()
             & pl.col("diseaseFromSource").is_not_null()
         )
-        .unique()
-    )
-
-    mapped_reports = (
-        # TODO: call mapping function
-        reports.with_columns(
-            disease=pl.struct(
-                pl.col("diseaseFromSource"), pl.lit("CHEMBL_TO_DO").alias("diseaseId")
-            ),
-            drug=pl.struct(
-                pl.col("drugFromSource"), pl.lit("EFO_TO_DO").alias("drugId")
-            ),
+        .with_columns(
+            disease=pl.struct(pl.col("diseaseFromSource")),
+            drug=pl.struct(pl.col("drugFromSource")),
         )
         .drop(["diseaseFromSource", "drugFromSource"])
         .unique()
@@ -102,9 +93,11 @@ def extract_clinical_report(
 
     return ClinicalReport(
         df=(
-            mapped_reports.group_by(
-                [c for c in mapped_reports.columns if c not in ["disease", "drug"]]
-            ).agg(
+            reports
+            .group_by(
+                [c for c in reports.columns if c not in ["disease", "drug"]]
+            )
+            .agg(
                 pl.col("disease").unique().alias("diseases"),
                 pl.col("drug").unique().alias("drugs"),
             )
