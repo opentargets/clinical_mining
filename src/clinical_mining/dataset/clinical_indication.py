@@ -4,8 +4,10 @@ import polars_hash as plh
 from clinical_mining.schemas import (
     validate_schema,
     ClinicalIndicationSchema,
+    ClinicalReportSchema,
     ClinicalStageCategory,
 )
+from notebooks.wip import df
 
 # Category ranking for Maximum Clinical Development Status
 CATEGORY_RANKS = {
@@ -46,7 +48,6 @@ class ClinicalIndication:
                 pl.col("drugId"), pl.col("diseaseId")
             ),
         )
-        self.assign_max_clinical_status()
         self.df = validate_schema(self.df, ClinicalIndicationSchema)
 
     @classmethod
@@ -55,24 +56,46 @@ class ClinicalIndication:
         return sorted(list(set(df.columns) - cls.AGGREGATION_FIELDS))
 
     @classmethod
-    def from_evidence(cls, evidence: pl.DataFrame) -> "ClinicalIndication":
-        """Aggregate drug/indication evidence into a ClinicalIndication."""
-        # Assert validity of evidence
+    def from_report(cls, report: pl.DataFrame) -> "ClinicalIndication":
+        """Aggregate drug/disease information collected in clinical report into a ClinicalIndication."""
+        # Assert validity of reports
+        report = validate_schema(report, ClinicalReportSchema)
 
-        study_metadata_cols = cls._get_study_metadata_columns(evidence)
-
-        agg_df = (
-            evidence.with_columns(
-                # Create hash to use as primary key (no studyId in this case)
-                id=plh.concat_str("drugName", "diseaseName").chash.sha2_256(),
-                study_info=pl.struct([pl.col(c) for c in study_metadata_cols]),
-            )
-            .group_by(list(cls.AGGREGATION_FIELDS))
-            .agg(
-                pl.col("study_info").unique().alias("sources"),
+        return cls(
+            df=(
+                # Explode clinical reports to get lists of study/disease/drug
+                report.explode("drugs")
+                .explode("diseases")
+                .unnest(["drugs", "diseases"])
+                .rename({"id": "clinicalReportId"})
+                .with_columns(
+                    drugName=pl.coalesce(pl.col("drugId"), pl.col("drugFromSource")),
+                    diseaseName=pl.coalesce(
+                        pl.col("diseaseId"), pl.col("diseaseFromSource")
+                    ),
+                    # Create hash to use as primary key (no studyId in this case)
+                    id=plh.concat_str(
+                        pl.coalesce(pl.col("drugId"), pl.col("drugFromSource")),
+                        pl.coalesce(pl.col("diseaseId"), pl.col("diseaseFromSource")),
+                    ).chash.sha2_256(),
+                    # Map clinicalStage to rank for sorting
+                    clinicalStageRank=pl.col("clinicalStage").replace_strict(
+                        CATEGORY_RANKS_STR,
+                        default=CATEGORY_RANKS[
+                            ClinicalStageCategory.NO_DEVELOPMENT_REPORTED
+                        ],
+                    ),
+                )
+                .sort("clinicalStageRank")
+                .group_by(list(cls.AGGREGATION_FIELDS), maintain_order=True)
+                .agg(
+                    pl.col("clinicalReportId").unique().alias("clinicalReportIds"),
+                    pl.col("hasExpertReview").any().alias("hasExpertReview"),
+                    # Get the maximum clinical stage (minimum rank = highest priority)
+                    pl.col("clinicalStage").first().alias("maxClinicalStage"),
+                )
             )
         )
-        return cls(df=agg_df)
 
     @staticmethod
     def _assign_mapping_status(
@@ -88,62 +111,9 @@ class ClinicalIndication:
             .otherwise(pl.lit("UNMAPPED"))
         )
 
-    def filter_by_studyid(self, studyId: str) -> "ClinicalIndication":
-        """Get associations supported by a given study; for example, a clinical trial ID."""
+    def filter_by_report_id(self, report_id: str) -> "ClinicalIndication":
+        """Get associations supported by a given report ID."""
 
         return ClinicalIndication(
-            df=self.df.with_columns(
-                pl.col("sources")
-                .list.eval(pl.element().struct["studyId"])
-                .alias("studyIds"),
-            )
-            .filter(pl.col("studyIds").list.contains(studyId))
-            .drop("studyIds")
+            df=self.df.filter(pl.col("clinicalReportIds").list.contains(report_id))
         )
-
-    def assign_max_clinical_status(self) -> "ClinicalIndication":
-        """Assign harmonised clinical status using Maximum Clinical Development Status (MCDS) logic.
-
-        For each drug-indication pair, determines the highest-ranked clinical status
-        across all supporting sources based on the harmonisation categories.
-
-        Returns:
-            ClinicalIndication with clinical_status field added containing the MCDS category
-        """
-
-        def get_max_clinical_status(sources_list) -> str:
-            """Get the maximum clinical stage status category from a list of sources."""
-            # Convert Polars list to Python list if needed
-            if hasattr(sources_list, "to_list"):
-                sources_list = sources_list.to_list()
-
-            # Extract all clinical statuses from sources and find the best rank
-            best_rank = CATEGORY_RANKS[ClinicalStageCategory.NO_DEVELOPMENT_REPORTED]
-            best_category = ClinicalStageCategory.NO_DEVELOPMENT_REPORTED
-
-            for source in sources_list:
-                status_str = source.get("clinicalStage")
-                if status_str:
-                    rank = CATEGORY_RANKS_STR.get(
-                        status_str,
-                        CATEGORY_RANKS[ClinicalStageCategory.NO_DEVELOPMENT_REPORTED],
-                    )
-                    category = ClinicalStageCategory(status_str)
-                else:
-                    category = ClinicalStageCategory.NO_DEVELOPMENT_REPORTED
-                    rank = CATEGORY_RANKS[category]
-
-                # Lower rank number = higher priority
-                if rank < best_rank:
-                    best_rank = rank
-                    best_category = category
-
-            return best_category.value
-
-        # Apply MCDS logic to each drug-indication pair
-        self.df = self.df.with_columns(
-            maxClinicalStage=pl.col("sources").map_elements(
-                get_max_clinical_status, return_dtype=pl.String
-            )
-        )
-        return self
