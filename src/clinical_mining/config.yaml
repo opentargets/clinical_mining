@@ -172,3 +172,8 @@ pipeline:
         ner_extract_drug: true
         ner_batch_size: 256
         ner_cache_path: ".cache/ner/2025-11-03.parquet"
+
+    - name: output_clinical_indication
+      function: clinical_mining.dataset.ClinicalIndication.from_report
+      parameters:
+        report: $output_clinical_report
