@@ -28,7 +28,7 @@ datasets:
   ttd_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/inputs/P1-05-Drug_disease.txt # null
   ema_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/inputs/medicines-output-medicines-report_en.xlsx # null
   pmda_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/inputs/pmda_approvals.pdf # null
-  output_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/outputs/clinical_report # ???
+  output_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/outputs # ???
 
 # Input Data Sources - Each key becomes the name of a DataFrame available to the pipeline steps.
 inputs:
@@ -177,3 +177,4 @@ pipeline:
       function: clinical_mining.dataset.ClinicalIndication.from_report
       parameters:
         report: $output_clinical_report
+        filter_by_mapping_status: true
