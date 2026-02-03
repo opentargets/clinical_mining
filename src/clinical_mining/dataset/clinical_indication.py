@@ -7,7 +7,6 @@ from clinical_mining.schemas import (
     ClinicalReportSchema,
     ClinicalStageCategory,
 )
-from notebooks.wip import df
 
 # Category ranking for Maximum Clinical Development Status
 CATEGORY_RANKS = {
@@ -37,18 +36,23 @@ class ClinicalIndication:
         "diseaseId",
     }
 
-    def __init__(self, df: pl.DataFrame):
+    def __init__(self, df: pl.DataFrame, filter_by_mapping_status: bool = False):
         """Initialises the dataset, validating and aligning the DataFrame.
 
         Also assigns mapping status and maximum clinical status.
         """
 
-        self.df = df.with_columns(
+        df = df.with_columns(
             mappingStatus=self._assign_mapping_status(
                 pl.col("drugId"), pl.col("diseaseId")
             ),
         )
-        self.df = validate_schema(self.df, ClinicalIndicationSchema)
+
+        if filter_by_mapping_status:
+            df = df.filter(pl.col("mappingStatus") == "FULLY_MAPPED").drop(
+                "drugName", "diseaseName", "mappingStatus"
+            )
+        self.df = validate_schema(df, ClinicalIndicationSchema)
 
     @classmethod
     def _get_study_metadata_columns(cls, df: pl.DataFrame) -> list[str]:
@@ -56,7 +60,9 @@ class ClinicalIndication:
         return sorted(list(set(df.columns) - cls.AGGREGATION_FIELDS))
 
     @classmethod
-    def from_report(cls, report: pl.DataFrame) -> "ClinicalIndication":
+    def from_report(
+        cls, report: pl.DataFrame, filter_by_mapping_status: bool = False
+    ) -> "ClinicalIndication":
         """Aggregate drug/disease information collected in clinical report into a ClinicalIndication."""
         # Assert validity of reports
         report = validate_schema(report, ClinicalReportSchema)
@@ -94,7 +100,8 @@ class ClinicalIndication:
                     # Get the maximum clinical stage (minimum rank = highest priority)
                     pl.col("clinicalStage").first().alias("maxClinicalStage"),
                 )
-            )
+            ),
+            filter_by_mapping_status=filter_by_mapping_status,
         )
 
     @staticmethod
