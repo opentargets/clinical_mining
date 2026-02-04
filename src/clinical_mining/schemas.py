@@ -52,15 +52,19 @@ class ClinicalSource(str, Enum):
 class ClinicalStageCategory(str, Enum):
     """Standardised clinical development status categories, ranked by development stage."""
 
+    WITHDRAWN = "WITHDRAWN"
     APPROVED = "APPROVED"
-    POST_APPROVAL_WITHDRAWN = "POST_APPROVAL_WITHDRAWN"
-    REGULATORY_REVIEW = "REGULATORY_REVIEW"
     PHASE_4 = "PHASE_4"
+    PREAPPROVAL = "PREAPPROVAL"
     PHASE_3 = "PHASE_3"
+    PHASE_2_3 = "PHASE_2_3"
     PHASE_2 = "PHASE_2"
+    PHASE_1_2 = "PHASE_1_2"
     PHASE_1 = "PHASE_1"
+    EARLY_PHASE_1 = "EARLY_PHASE_1"
+    IND = "IND"
     PRECLINICAL = "PRECLINICAL"
-    NO_DEVELOPMENT_REPORTED = "NO_DEVELOPMENT_REPORTED"
+    UNKNOWN = "UNKNOWN"
 
 
 class MappingStatus(str, Enum):
@@ -71,6 +75,7 @@ class MappingStatus(str, Enum):
     DISEASE_MAPPED = "DISEASE_MAPPED"
     UNMAPPED = "UNMAPPED"
 
+
 class ClinicalReportType(str, Enum):
     """The type of the clinical record."""
 
@@ -79,22 +84,27 @@ class ClinicalReportType(str, Enum):
     REGULATORY = "REGULATORY_AGENCY"
     CURATED_RESOURCE = "CURATED_RESOURCE"
 
-class AssociatedDrug(BaseModel):
 
+class AssociatedDrug(BaseModel):
     drugFromSource: str = Field(..., description="The drug label used at the source.")
     drugId: str | None = Field(..., description="The assigned drug ID.")
 
-class AssociatedDisease(BaseModel):
 
-    diseaseFromSource: str = Field(..., description="The disease label used at the source.")
+class AssociatedDisease(BaseModel):
+    diseaseFromSource: str = Field(
+        ..., description="The disease label used at the source."
+    )
     diseaseId: str | None = Field(..., description="The assigned disease ID.")
+
 
 class ClinicalReportSchema(BaseModel):
     """Represents a clinical record and its metadata."""
 
     model_config = ConfigDict(extra="allow")
 
-    id: str = Field(..., description="The identifier for the clinical reference, e.g. NCT04012606.")
+    id: str = Field(
+        ..., description="The identifier for the clinical reference, e.g. NCT04012606."
+    )
     clinicalStage: ClinicalStageCategory = Field(
         description="The clinical development status of the clinical reference after harmonisation .",
     )
@@ -121,7 +131,9 @@ class ClinicalReportSchema(BaseModel):
         description="Whether the report has been reviewed by an expert.",
     )
 
-   # + optional trial metadata fields with the `trial` prefix. E.g. trialDescription
+
+# + optional trial metadata fields with the `trial` prefix. E.g. trialDescription
+
 
 class ClinicalIndicationSchema(BaseModel):
     """Aggregated drug-indication relationship with multiple supporting sources."""

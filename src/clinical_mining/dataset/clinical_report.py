@@ -12,72 +12,76 @@ from pyspark.sql import DataFrame, SparkSession
 
 # Clinical status harmonization constants
 PHASE_TO_CATEGORY_MAP = {
-    # APPROVED (Rank 1)
+    # WITHDRAWN (Rank 1)
+    "withdrawn": ClinicalStageCategory.WITHDRAWN,
+    "withdrawn from market": ClinicalStageCategory.WITHDRAWN,
+    "revoked": ClinicalStageCategory.WITHDRAWN,
+    "expired": ClinicalStageCategory.WITHDRAWN,
+    "lapsed": ClinicalStageCategory.WITHDRAWN,
+    "suspended": ClinicalStageCategory.WITHDRAWN,
+    # APPROVED (Rank 2)
     "approved": ClinicalStageCategory.APPROVED,
     "authorised": ClinicalStageCategory.APPROVED,
     "approved (orphan drug)": ClinicalStageCategory.APPROVED,
     "approved in china": ClinicalStageCategory.APPROVED,
     "approved in eu": ClinicalStageCategory.APPROVED,
-    "opinion": ClinicalStageCategory.APPROVED,
-    # POST_APPROVAL_WITHDRAWN (Rank 2)
-    "withdrawn": ClinicalStageCategory.POST_APPROVAL_WITHDRAWN,
-    "withdrawn from market": ClinicalStageCategory.POST_APPROVAL_WITHDRAWN,
-    "revoked": ClinicalStageCategory.POST_APPROVAL_WITHDRAWN,
-    "expired": ClinicalStageCategory.POST_APPROVAL_WITHDRAWN,
-    "lapsed": ClinicalStageCategory.POST_APPROVAL_WITHDRAWN,
-    "suspended": ClinicalStageCategory.POST_APPROVAL_WITHDRAWN,
-    # REGULATORY_REVIEW (Rank 3)
-    "application submitted": ClinicalStageCategory.REGULATORY_REVIEW,
-    "approval submitted": ClinicalStageCategory.REGULATORY_REVIEW,
-    "nda filed": ClinicalStageCategory.REGULATORY_REVIEW,
-    "bla submitted": ClinicalStageCategory.REGULATORY_REVIEW,
-    "ind submitted": ClinicalStageCategory.REGULATORY_REVIEW,
-    "opinion under re-examination": ClinicalStageCategory.REGULATORY_REVIEW,
-    # PHASE_4 (Rank 4)
+    "registered": ClinicalStageCategory.APPROVED,
+    # PHASE_4 (Rank 3)
     "phase4": ClinicalStageCategory.PHASE_4,
     "phase 4": ClinicalStageCategory.PHASE_4,
     "discontinued in phase 4": ClinicalStageCategory.PHASE_4,
+    # PREAPPROVAL (Rank 4)
+    "preregistration": ClinicalStageCategory.PREAPPROVAL,
+    "application submitted": ClinicalStageCategory.PREAPPROVAL,
+    "approval submitted": ClinicalStageCategory.PREAPPROVAL,
+    "nda filed": ClinicalStageCategory.PREAPPROVAL,
+    "bla submitted": ClinicalStageCategory.PREAPPROVAL,
+    "opinion": ClinicalStageCategory.PREAPPROVAL,
+    "opinion under re-examination": ClinicalStageCategory.PREAPPROVAL,
+    "discontinued in preregistration": ClinicalStageCategory.PREAPPROVAL,
     # PHASE_3 (Rank 5)
     "phase3": ClinicalStageCategory.PHASE_3,
     "phase 3": ClinicalStageCategory.PHASE_3,
-    "phase2/phase3": ClinicalStageCategory.PHASE_3,
-    "phase 2/3": ClinicalStageCategory.PHASE_3,
     "discontinued in phase 3": ClinicalStageCategory.PHASE_3,
-    "discontinued in phase 2/3": ClinicalStageCategory.PHASE_3,
-    # PHASE_2 (Rank 6)
+    # PHASE_2_3 (Rank 6)
+    "phase2/phase3": ClinicalStageCategory.PHASE_2_3,
+    "phase 2/3": ClinicalStageCategory.PHASE_2_3,
+    "discontinued in phase 2/3": ClinicalStageCategory.PHASE_2_3,
+    # PHASE_2 (Rank 7)
     "phase2": ClinicalStageCategory.PHASE_2,
     "phase 2": ClinicalStageCategory.PHASE_2,
     "phase 2a": ClinicalStageCategory.PHASE_2,
     "phase 2b": ClinicalStageCategory.PHASE_2,
-    "phase1/phase2": ClinicalStageCategory.PHASE_2,
-    "phase 1/2": ClinicalStageCategory.PHASE_2,
-    "phase 1b/2a": ClinicalStageCategory.PHASE_2,
-    "phase 1/2a": ClinicalStageCategory.PHASE_2,
     "discontinued in phase 2": ClinicalStageCategory.PHASE_2,
-    "discontinued in phase 1/2": ClinicalStageCategory.PHASE_2,
     "discontinued in phase 2a": ClinicalStageCategory.PHASE_2,
     "discontinued in phase 2b": ClinicalStageCategory.PHASE_2,
-    # PHASE_1 (Rank 7)
+    # PHASE_1_2 (Rank 8)
+    "phase1/phase2": ClinicalStageCategory.PHASE_1_2,
+    "phase 1/2": ClinicalStageCategory.PHASE_1_2,
+    "phase 1b/2a": ClinicalStageCategory.PHASE_1_2,
+    "phase 1/2a": ClinicalStageCategory.PHASE_1_2,
+    "discontinued in phase 1/2": ClinicalStageCategory.PHASE_1_2,
+    # PHASE_1 (Rank 9)
     "phase1": ClinicalStageCategory.PHASE_1,
     "phase 1": ClinicalStageCategory.PHASE_1,
     "phase 1b": ClinicalStageCategory.PHASE_1,
-    "early_phase1": ClinicalStageCategory.PHASE_1,
-    "phase 0": ClinicalStageCategory.PHASE_1,
     "discontinued in phase 1": ClinicalStageCategory.PHASE_1,
-    # PRECLINICAL (Rank 8)
+    # EARLY_PHASE_1 (Rank 10)
+    "early_phase1": ClinicalStageCategory.EARLY_PHASE_1,
+    "phase 0": ClinicalStageCategory.EARLY_PHASE_1,
+    # IND (Rank 11)
+    "ind submitted": ClinicalStageCategory.IND,
+    "investigative": ClinicalStageCategory.IND,
+    # PRECLINICAL (Rank 12)
     "preclinical": ClinicalStageCategory.PRECLINICAL,
     "patented": ClinicalStageCategory.PRECLINICAL,
-    # NO_DEVELOPMENT_REPORTED (Rank 9)
-    "investigative": ClinicalStageCategory.NO_DEVELOPMENT_REPORTED,
-    "clinical trial": ClinicalStageCategory.NO_DEVELOPMENT_REPORTED,
-    "registered": ClinicalStageCategory.NO_DEVELOPMENT_REPORTED,
-    "preregistration": ClinicalStageCategory.NO_DEVELOPMENT_REPORTED,
-    "terminated": ClinicalStageCategory.NO_DEVELOPMENT_REPORTED,
-    "discontinued in preregistration": ClinicalStageCategory.NO_DEVELOPMENT_REPORTED,
-    "application withdrawn": ClinicalStageCategory.NO_DEVELOPMENT_REPORTED,
-    "refused": ClinicalStageCategory.NO_DEVELOPMENT_REPORTED,
-    "withdrawn from rolling review": ClinicalStageCategory.NO_DEVELOPMENT_REPORTED,
-    "NA": ClinicalStageCategory.NO_DEVELOPMENT_REPORTED,
+    # UNKNOWN (Rank 13)
+    "clinical trial": ClinicalStageCategory.UNKNOWN,
+    "terminated": ClinicalStageCategory.UNKNOWN,
+    "application withdrawn": ClinicalStageCategory.UNKNOWN,
+    "refused": ClinicalStageCategory.UNKNOWN,
+    "withdrawn from rolling review": ClinicalStageCategory.UNKNOWN,
+    "NA": ClinicalStageCategory.UNKNOWN,
 }
 
 # Sources that indicate approved status when phase is null
@@ -99,14 +103,12 @@ def map_phase_to_category(phase: str | None, source: str) -> ClinicalStageCatego
         if source in APPROVED_SOURCES:
             return ClinicalStageCategory.APPROVED
         else:
-            return ClinicalStageCategory.NO_DEVELOPMENT_REPORTED
+            return ClinicalStageCategory.UNKNOWN
 
     # Handle case-insensitive mapping
     phase_lower = phase.lower() if isinstance(phase, str) else str(phase).lower()
 
-    return PHASE_TO_CATEGORY_MAP.get(
-        phase_lower, ClinicalStageCategory.NO_DEVELOPMENT_REPORTED
-    )
+    return PHASE_TO_CATEGORY_MAP.get(phase_lower, ClinicalStageCategory.UNKNOWN)
 
 
 class ClinicalReport:
@@ -139,9 +141,7 @@ class ClinicalReport:
             df.with_columns(
                 clinicalStageRank=pl.col("clinicalStage").replace_strict(
                     CATEGORY_RANKS_STR,
-                    default=CATEGORY_RANKS_STR[
-                        ClinicalStageCategory.NO_DEVELOPMENT_REPORTED.value
-                    ],
+                    default=CATEGORY_RANKS_STR[ClinicalStageCategory.UNKNOWN.value],
                 )
             )
             .sort(["id", "clinicalStageRank"])
