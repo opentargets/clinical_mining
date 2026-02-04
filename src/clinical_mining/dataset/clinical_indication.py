@@ -10,15 +10,19 @@ from clinical_mining.schemas import (
 
 # Category ranking for Maximum Clinical Development Status
 CATEGORY_RANKS = {
-    ClinicalStageCategory.APPROVED: 1,
-    ClinicalStageCategory.POST_APPROVAL_WITHDRAWN: 2,
-    ClinicalStageCategory.REGULATORY_REVIEW: 3,
-    ClinicalStageCategory.PHASE_4: 4,
+    ClinicalStageCategory.WITHDRAWN: 1,
+    ClinicalStageCategory.APPROVED: 2,
+    ClinicalStageCategory.PHASE_4: 3,
+    ClinicalStageCategory.PREAPPROVAL: 4,
     ClinicalStageCategory.PHASE_3: 5,
-    ClinicalStageCategory.PHASE_2: 6,
-    ClinicalStageCategory.PHASE_1: 7,
-    ClinicalStageCategory.PRECLINICAL: 8,
-    ClinicalStageCategory.NO_DEVELOPMENT_REPORTED: 9,
+    ClinicalStageCategory.PHASE_2_3: 6,
+    ClinicalStageCategory.PHASE_2: 7,
+    ClinicalStageCategory.PHASE_1_2: 8,
+    ClinicalStageCategory.PHASE_1: 9,
+    ClinicalStageCategory.EARLY_PHASE_1: 10,
+    ClinicalStageCategory.IND: 11,
+    ClinicalStageCategory.PRECLINICAL: 12,
+    ClinicalStageCategory.UNKNOWN: 13,
 }
 
 CATEGORY_RANKS_STR = {k.value: v for k, v in CATEGORY_RANKS.items()}
@@ -87,9 +91,7 @@ class ClinicalIndication:
                     # Map clinicalStage to rank for sorting
                     clinicalStageRank=pl.col("clinicalStage").replace_strict(
                         CATEGORY_RANKS_STR,
-                        default=CATEGORY_RANKS[
-                            ClinicalStageCategory.NO_DEVELOPMENT_REPORTED
-                        ],
+                        default=CATEGORY_RANKS[ClinicalStageCategory.UNKNOWN],
                     ),
                 )
                 .sort("clinicalStageRank")
