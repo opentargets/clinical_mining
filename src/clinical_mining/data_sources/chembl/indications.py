@@ -7,26 +7,26 @@ from clinical_mining.dataset import ClinicalReport
 
 
 def extract_clinical_report(
-    indications: pl.DataFrame,
-    molecule: pl.DataFrame,
-    indications_refs: pl.DataFrame,
+    drug_indication: pl.DataFrame,
+    molecule_dictionary: pl.DataFrame,
+    indication_refs: pl.DataFrame,
 ) -> ClinicalReport:
     """
     Extract clinical reports from the curation ChEMBL does for drugs and clinical candidates.
     Sources include: FDA, EMA, WHO ATC, ClinicalTrials.gov, INN, USAN.
 
     Args:
-        indications: `drug_indications` table from ChEMBL
-        molecule: `molecule_dictionary` table from ChEMBL
-        indications_refs: `drug_indication_refs` table from ChEMBL
+        drug_indication: `drug_indication` table from ChEMBL
+        molecule_dictionary: `molecule_dictionary` table from ChEMBL
+        indication_refs: `indication_refs` table from ChEMBL
 
     Returns:
         ClinicalReport: Dataset with drug/indication relationships
     """
 
     reports = (
-        indications.join(molecule, "molregno")
-        .join(indications_refs, "drugind_id")
+        drug_indication.join(molecule_dictionary, "molregno")
+        .join(indication_refs, "drugind_id")
         .filter(pl.col("efo_id").is_not_null())
         # Some EMA references that are duplicated
         .filter(~pl.col("ref_url").str.starts_with("www"))
@@ -50,6 +50,7 @@ def extract_clinical_report(
             )
             .otherwise(pl.col("ref_url"))
             .alias("url"),
+            pl.lit(True).alias("hasExpertReview"),
             pl.col("ref_type").alias("source"),
             pl.struct(
                 pl.col("efo_id").str.replace(":", "_").alias("diseaseId"),

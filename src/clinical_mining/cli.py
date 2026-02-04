@@ -18,23 +18,29 @@ def main(cfg: DictConfig) -> pl.DataFrame:
     """Main function to run the clinical mining pipeline."""
     data_store = {}
 
-    # Construct database URI from config
-    aact_url = construct_db_uri(
-        db_type=cfg.db_properties.aact.type,
-        db_uri=cfg.db_properties.aact.uri,
-        db_user=cfg.db_properties.aact.user,
-        db_password=cfg.db_properties.aact.password,
-    )
+    db_urls = {}
+    for db_name, props in cfg.db_properties.items():
+        db_urls[db_name] = construct_db_uri(
+            db_type=props.type,
+            db_uri=props.uri,
+            db_user=props.user,
+            db_password=props.password,
+        )
 
     # Load all data sources
     for name, source in cfg.inputs.items():
         logger.info(f"Loading input: {name}")
         if source.format == "db_table":
+            db_name = source.get("db", "aact")
+            if db_name not in db_urls:
+                raise KeyError(
+                    f"Input '{name}' references db '{db_name}', but it is not defined under db_properties"
+                )
             data_store[name] = load_db_table(
                 table_name=name,
-                db_url=aact_url,
+                db_url=db_urls[db_name],
                 select_cols=list(source.select_cols),
-                db_schema=cfg.db_properties.aact.schema,
+                db_schema=cfg.db_properties[db_name].schema,
             )
         elif "spark" in name:
             if data_store.get("spark_session") is None:

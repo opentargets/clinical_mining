@@ -12,17 +12,14 @@ db_properties:
     password: null
   
   chembl:
-    type: oracle
-    host: ora-vm-089
-    port: 1531
-    service: CHEMPRO
+    type: postgresql
+    uri: localhost:5432/chembl_36
+    schema: public
     user: null
     password: null
-    oracle_client_path: /opt/oracle/instantclient_23_3
 
 # Path Definitions for Local Datasets
 datasets:
-  chembl_indications_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/inputs/chembl_drug_indication.jsonl # ???
   disease_index_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/inputs/disease # null
   molecule_index_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/inputs/chembl_molecule # null
   ttd_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/inputs/P1-05-Drug_disease.txt # null
@@ -35,9 +32,6 @@ inputs:
   chembl_curation:
     format: parquet
     path: /Users/irenelopez/EBI/repos/clinical_mining/data/outputs/chembl_indications/2101.parquet
-  # chembl_indications_raw:
-  #   format: json
-  #   path: ${datasets.chembl_indications_path}
   molecule_index_spark:
     format: parquet
     path: ${datasets.molecule_index_path}
@@ -47,6 +41,7 @@ inputs:
 
   studies:
     format: db_table
+    db: aact
     select_cols:
       - nct_id
       - overall_status
@@ -58,28 +53,33 @@ inputs:
       - official_title
   interventions:
     format: db_table
+    db: aact
     select_cols:
       - nct_id
       - intervention_type
       - name
   conditions:
     format: db_table
+    db: aact
     select_cols:
       - nct_id
       - downcase_name
   study_references:
     format: db_table
+    db: aact
     select_cols:
       - nct_id
       - pmid
       - reference_type
   designs:
     format: db_table
+    db: aact
     select_cols:
       - nct_id
       - primary_purpose
   brief_summaries:
     format: db_table
+    db: aact
     select_cols:
       - nct_id
       - description
@@ -96,6 +96,31 @@ inputs:
   #     - title
   #     - param_value
 
+  drug_indication:
+    format: db_table
+    db: chembl
+    select_cols:
+      - drugind_id
+      - molregno
+      - max_phase_for_ind
+      - efo_id
+      - efo_term
+
+  indication_refs:
+    format: db_table
+    db: chembl
+    select_cols:
+      - drugind_id
+      - ref_type
+      - ref_id
+      - ref_url
+
+  molecule_dictionary:
+    format: db_table
+    db: chembl
+    select_cols:
+      - molregno
+      - chembl_id
   
 
 # =============================
@@ -122,6 +147,13 @@ pipeline:
 
   # GENERATE: Steps that generate the core drug/indication DataFrames.
   generate:
+    - name: chembl_report
+      function: clinical_mining.data_sources.chembl.indications.extract_clinical_report
+      parameters:
+        drug_indication: $drug_indication
+        molecule_dictionary: $molecule_dictionary
+        indication_refs: $indication_refs
+
     - name: aact_report
       function: clinical_mining.data_sources.aact.extract_clinical_report
       parameters:
@@ -153,11 +185,16 @@ pipeline:
 
   # POST-PROCESS: Final transformation steps that run sequentially on the unified `indications` DataFrame.
   post_process:
+    - name: chembl_report_filter
+      function: clinical_mining.utils.polars_helpers.filter_df
+      parameters:
+        df: $chembl_report
+        expr: "source != 'ClinicalTrials'"
 
     - name: all_reports
       function: clinical_mining.utils.polars_helpers.union_dfs
       parameters:
-        dfs: [$aact_report, $ttd_report, $ema_report, $pmda_report]
+        dfs: [$aact_report, $ttd_report, $ema_report, $pmda_report, $chembl_report_filter]
 
     - name: output_clinical_report
       function: clinical_mining.dataset.ClinicalReport.map_entities
