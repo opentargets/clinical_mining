@@ -100,3 +100,22 @@ def coalesce_column(
     )
     return df.drop(existing_columns) if drop else df
 
+def filter_df(df: pl.DataFrame, expr: str | pl.Expr) -> pl.DataFrame:
+    """Filters a Polars DataFrame based on a condition.
+    
+    Args:
+        df (pl.DataFrame): The DataFrame to filter.
+        expr (str | pl.Expr): The condition to filter by. Can be a string expression
+    
+    Returns:
+        pl.DataFrame: The filtered DataFrame.
+    """
+    if isinstance(expr, pl.Expr):
+        return df.filter(expr)
+
+    ctx = pl.SQLContext()
+    ctx.register("df", df)
+
+    return ctx.execute(f"SELECT * FROM df WHERE {expr}").collect()
+
+
