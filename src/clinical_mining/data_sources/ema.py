@@ -84,8 +84,14 @@ def extract_clinical_report(
             & pl.col("diseaseFromSource").is_not_null()
         )
         .with_columns(
-            disease=pl.struct(pl.col("diseaseFromSource")),
-            drug=pl.struct(pl.col("drugFromSource")),
+            disease=pl.struct(
+                pl.lit(None, dtype=pl.String).alias("diseaseId"),
+                pl.col("diseaseFromSource"),
+            ),
+            drug=pl.struct(
+                pl.col("drugFromSource"),
+                pl.lit(None, dtype=pl.String).alias("drugId"),
+            ),
         )
         .drop(["diseaseFromSource", "drugFromSource"])
         .unique()

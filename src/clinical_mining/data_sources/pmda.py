@@ -368,10 +368,12 @@ def extract_clinical_report(
                 pl.col("active_ingredients")
                 .str.strip_chars()
                 .str.to_lowercase()
-                .alias("drugFromSource")
+                .alias("drugFromSource"),
+                pl.lit(None, dtype=pl.String).alias("drugId"),
             ),
             disease=pl.struct(
-                pl.col("extracted_diseases").alias("diseaseFromSource")
+                pl.lit(None, dtype=pl.String).alias("diseaseId"),
+                pl.col("extracted_diseases").alias("diseaseFromSource"),
             ),
             hasExpertReview=pl.lit(False),
             url=pl.lit(

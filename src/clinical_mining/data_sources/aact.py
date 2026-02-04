@@ -112,8 +112,14 @@ def extract_clinical_report(
             hasExpertReview=pl.lit(False),
             type=pl.lit(ClinicalReportType.CLINICAL_TRIAL),
             phaseFromSource=pl.col("trial_phase"),
-            disease=pl.struct(pl.col("diseaseFromSource")),
-            drug=pl.struct(pl.col("drugFromSource")),
+            disease=pl.struct(
+                pl.lit(None, dtype=pl.String).alias("diseaseId"),
+                pl.col("diseaseFromSource"),
+            ),
+            drug=pl.struct(
+                pl.col("drugFromSource"),
+                pl.lit(None, dtype=pl.String).alias("drugId"),
+            ),
         )
         .drop(["diseaseFromSource", "drugFromSource"])
         .unique()

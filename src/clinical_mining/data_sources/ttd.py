@@ -66,8 +66,14 @@ def extract_clinical_report(
         ),
         hasExpertReview=pl.lit(True),
         phaseFromSource=pl.col("clinical_stage").str.to_lowercase(),
-        drug=pl.struct(pl.col("drugFromSource").str.to_lowercase()),
-        disease=pl.struct(pl.col("diseaseFromSource").str.to_lowercase()),
+        drug=pl.struct(
+            pl.col("drugFromSource").str.to_lowercase(),
+            pl.lit(None, dtype=pl.String).alias("drugId"),
+        ),
+        disease=pl.struct(
+            pl.lit(None, dtype=pl.String).alias("diseaseId"),
+            pl.col("diseaseFromSource").str.to_lowercase(),
+        ),
         source=pl.lit("TTD"),
     ).unique()
 
