@@ -19,17 +19,17 @@ PHASE_TO_CATEGORY_MAP = {
     "expired": ClinicalStageCategory.WITHDRAWN,
     "lapsed": ClinicalStageCategory.WITHDRAWN,
     "suspended": ClinicalStageCategory.WITHDRAWN,
-    # APPROVED (Rank 2)
+    # PHASE_4 (Rank 2)
+    "phase4": ClinicalStageCategory.PHASE_4,
+    "phase 4": ClinicalStageCategory.PHASE_4,
+    "discontinued in phase 4": ClinicalStageCategory.PHASE_4,
+    # APPROVED (Rank 3)
     "approved": ClinicalStageCategory.APPROVED,
     "authorised": ClinicalStageCategory.APPROVED,
     "approved (orphan drug)": ClinicalStageCategory.APPROVED,
     "approved in china": ClinicalStageCategory.APPROVED,
     "approved in eu": ClinicalStageCategory.APPROVED,
     "registered": ClinicalStageCategory.APPROVED,
-    # PHASE_4 (Rank 3)
-    "phase4": ClinicalStageCategory.PHASE_4,
-    "phase 4": ClinicalStageCategory.PHASE_4,
-    "discontinued in phase 4": ClinicalStageCategory.PHASE_4,
     # PREAPPROVAL (Rank 4)
     "preregistration": ClinicalStageCategory.PREAPPROVAL,
     "application submitted": ClinicalStageCategory.PREAPPROVAL,
