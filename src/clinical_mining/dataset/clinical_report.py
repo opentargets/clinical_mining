@@ -98,12 +98,8 @@ def map_phase_to_category(phase: str | None, source: str) -> ClinicalStageCatego
     Returns:
         Standardised clinical status category
     """
-    if phase is None:
-        # Handle null values based on source
-        if source in APPROVED_SOURCES:
-            return ClinicalStageCategory.APPROVED
-        else:
-            return ClinicalStageCategory.UNKNOWN
+    if source in APPROVED_SOURCES:
+        return ClinicalStageCategory.APPROVED
 
     # Handle case-insensitive mapping
     phase_lower = phase.lower() if isinstance(phase, str) else str(phase).lower()

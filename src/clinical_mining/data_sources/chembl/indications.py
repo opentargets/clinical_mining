@@ -2,65 +2,75 @@
 
 import polars as pl
 
-from clinical_mining.dataset import ClinicalEvidence
+from clinical_mining.schemas import ClinicalReportType
+from clinical_mining.dataset import ClinicalReport
 
 
-def extract_clinical_indication(
-    raw_indications: pl.DataFrame, exclude_trials: bool = False
-) -> ClinicalEvidence:
+def extract_clinical_report(
+    indications: pl.DataFrame,
+    molecule: pl.DataFrame,
+    indications_refs: pl.DataFrame,
+) -> ClinicalReport:
     """
-    Extract drug/indication relationships from ChEMBL Indications JSON file storing indications for drugs, and clinical candidate drugs, from a variety of sources (e.g., FDA, EMA, WHO ATC, ClinicalTrials.gov, INN, USAN).
+    Extract clinical reports from the curation ChEMBL does for drugs and clinical candidates.
+    Sources include: FDA, EMA, WHO ATC, ClinicalTrials.gov, INN, USAN.
 
     Args:
-        raw_indications: ChEMBL Indications dataset in JSON form
+        indications: `drug_indications` table from ChEMBL
+        molecule: `molecule_dictionary` table from ChEMBL
+        indications_refs: `drug_indication_refs` table from ChEMBL
+
     Returns:
-        ClinicalEvidence: Dataset with drug/indication relationships
+        ClinicalReport: Dataset with drug/indication relationships
     """
 
-    indications = (
-        raw_indications.select(
-            pl.col("_metadata")
-            .struct.field("all_molecule_chembl_ids")
-            .alias("drugIds"),
-            pl.col("efo_id").str.replace(":", "_").alias("diseaseId"),
-            "indication_refs",
-            "max_phase_for_ind",
-        )
-        .explode("indication_refs")
-        .with_columns(
-            studyId=pl.col("indication_refs").struct.field("ref_id").str.split(","),
-            source=pl.col("indication_refs").struct.field("ref_type"),
-            url=pl.col("indication_refs").struct.field("ref_url"),
-        )
-        .explode("studyId")
-        .explode("drugIds")  # Explode drugIds after all other explodes
-        .rename({"drugIds": "drugId"})
-        .with_columns(
-            url=pl.when(pl.col("source") == "ClinicalTrials")
+    reports = (
+        indications.join(molecule, "molregno")
+        .join(indications_refs, "drugind_id")
+        .filter(pl.col("efo_id").is_not_null())
+        # Some EMA references that are duplicated
+        .filter(~pl.col("ref_url").str.starts_with("www"))
+        .select(
+            pl.col("ref_id").str.split(",").alias("id"),
+            pl.col("max_phase_for_ind")
+            .cast(pl.Float16)
+            .cast(pl.String)
+            .alias("phaseFromSource"),
+            pl.when(pl.col("ref_type") == "ClinicalTrials")
+            .then(pl.lit(ClinicalReportType.CLINICAL_TRIAL))
+            .when(pl.col("ref_type") == "DailyMed")
+            .then(pl.lit(ClinicalReportType.DRUG_LABEL))
+            .otherwise(pl.lit(ClinicalReportType.CURATED_RESOURCE))
+            .alias("type"),
+            pl.when(pl.col("ref_type") == "ClinicalTrials")
             .then(
                 pl.concat_str(
-                    [
-                        pl.lit("https://clinicaltrials.gov/search?term="),
-                        pl.col("studyId"),
-                    ]
+                    pl.lit("https://clinicaltrials.gov/study/"), pl.col("ref_id")
                 )
             )
-            .otherwise(pl.col("url")),
-            clinical_phase=pl.when(pl.col("source") == "ClinicalTrials")
-            .then(pl.col("max_phase_for_ind"))
-            .when(pl.col("source").is_in(["EMA", "FDA", "DailyMed", "ATC"]))
-            .then(pl.lit("approved"))
-            .otherwise(pl.lit(None)),
+            .otherwise(pl.col("ref_url"))
+            .alias("url"),
+            pl.col("ref_type").alias("source"),
+            pl.struct(
+                pl.col("efo_id").str.replace(":", "_").alias("diseaseId"),
+                pl.col("efo_term").str.to_lowercase().alias("diseaseFromSource"),
+            ).alias("disease"),
+            pl.struct(
+                pl.lit(None).alias("drugFromSource"),
+                pl.col("chembl_id").alias("drugId"),
+            ).alias("drug"),
         )
-        .drop("indication_refs", "max_phase_for_ind")
-        # Not all evidence are mapped. We drop those since we lack drug/disease labels
-        .filter(
-            (pl.col("diseaseId").is_not_null()) & (pl.col("drugId").is_not_null())
-        )
+        .explode("id")
         .unique()
     )
 
-    if exclude_trials:
-        indications = indications.filter(pl.col("source") != "ClinicalTrials")
-
-    return ClinicalEvidence(df=indications)
+    return ClinicalReport(
+        df=(
+            reports.group_by(
+                [c for c in reports.columns if c not in ["disease", "drug"]]
+            ).agg(
+                pl.col("disease").unique().alias("diseases"),
+                pl.col("drug").unique().alias("drugs"),
+            )
+        )
+    )
