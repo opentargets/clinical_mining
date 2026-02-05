@@ -223,7 +223,7 @@ pipeline:
       function: clinical_mining.utils.polars_helpers.filter_df
       parameters:
         df: $chembl_drug_warning_report
-        expr: "type == 'Withdrawn'"
+        expr: "phaseFromSource == 'withdrawn'"
 
     - name: all_reports
       function: clinical_mining.utils.polars_helpers.union_dfs
