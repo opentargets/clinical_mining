@@ -96,7 +96,7 @@ def _resolve_params(params: dict, data_store: dict) -> dict:
             resolved_params[name] = value
     return resolved_params
 
-
+from loguru import logger
 def execute_step(
     step: dict[str, any],
     data_store: dict[str, any],
@@ -120,4 +120,5 @@ def execute_step(
     if not isinstance(result, pl.DataFrame) and hasattr(result, "df"):
         result = result.df
     data_store[step.name] = result
+    logger.info(f"Step {step.name} schema: {result.schema}")
     return result
