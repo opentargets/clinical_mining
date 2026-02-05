@@ -121,6 +121,27 @@ inputs:
     select_cols:
       - molregno
       - chembl_id
+
+  drug_warning:
+    format: db_table
+    db: chembl
+    select_cols:
+      - warning_id
+      - molregno
+      - warning_type
+      - warning_year
+      - warning_country
+      - efo_id
+      - efo_term
+
+  warning_refs:
+    format: db_table
+    db: chembl
+    select_cols:
+      - warning_id
+      - ref_type
+      - ref_id
+      - ref_url
   
 
 # =============================
@@ -147,12 +168,19 @@ pipeline:
 
   # GENERATE: Steps that generate the core drug/indication DataFrames.
   generate:
-    - name: chembl_report
+    - name: chembl_indication_report
       function: clinical_mining.data_sources.chembl.indications.extract_clinical_report
       parameters:
         drug_indication: $drug_indication
         molecule_dictionary: $molecule_dictionary
         indication_refs: $indication_refs
+
+    - name: chembl_drug_warning_report
+      function: clinical_mining.data_sources.chembl.drug_warnings.extract_clinical_report
+      parameters:
+        drug_warning: $drug_warning
+        molecule_dictionary: $molecule_dictionary
+        warning_refs: $warning_refs
 
     - name: aact_report
       function: clinical_mining.data_sources.aact.extract_clinical_report
@@ -185,16 +213,22 @@ pipeline:
 
   # POST-PROCESS: Final transformation steps that run sequentially on the unified `indications` DataFrame.
   post_process:
-    - name: chembl_report_filter
+    - name: chembl_indication_report_filter
       function: clinical_mining.utils.polars_helpers.filter_df
       parameters:
-        df: $chembl_report
+        df: $chembl_indication_report
         expr: "source != 'ClinicalTrials'"
+
+    - name: chembl_withdrawn
+      function: clinical_mining.utils.polars_helpers.filter_df
+      parameters:
+        df: $chembl_drug_warning_report
+        expr: "warning_type == 'Withdrawn'"
 
     - name: all_reports
       function: clinical_mining.utils.polars_helpers.union_dfs
       parameters:
-        dfs: [$aact_report, $ttd_report, $ema_report, $pmda_report, $chembl_report_filter]
+        dfs: [$aact_report, $ttd_report, $ema_report, $pmda_report, $chembl_indication_report_filter, $chembl_withdrawn]
 
     - name: output_clinical_report
       function: clinical_mining.dataset.ClinicalReport.map_entities
