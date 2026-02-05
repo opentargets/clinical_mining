@@ -23,6 +23,7 @@ PHASE_TO_CATEGORY_MAP = {
     "phase4": ClinicalStageCategory.PHASE_4,
     "phase 4": ClinicalStageCategory.PHASE_4,
     "discontinued in phase 4": ClinicalStageCategory.PHASE_4,
+    "4.0": ClinicalStageCategory.PHASE_4,
     # APPROVED (Rank 3)
     "approved": ClinicalStageCategory.APPROVED,
     "authorised": ClinicalStageCategory.APPROVED,
@@ -43,6 +44,7 @@ PHASE_TO_CATEGORY_MAP = {
     "phase3": ClinicalStageCategory.PHASE_3,
     "phase 3": ClinicalStageCategory.PHASE_3,
     "discontinued in phase 3": ClinicalStageCategory.PHASE_3,
+    "3.0": ClinicalStageCategory.PHASE_3,
     # PHASE_2_3 (Rank 6)
     "phase2/phase3": ClinicalStageCategory.PHASE_2_3,
     "phase 2/3": ClinicalStageCategory.PHASE_2_3,
@@ -55,6 +57,7 @@ PHASE_TO_CATEGORY_MAP = {
     "discontinued in phase 2": ClinicalStageCategory.PHASE_2,
     "discontinued in phase 2a": ClinicalStageCategory.PHASE_2,
     "discontinued in phase 2b": ClinicalStageCategory.PHASE_2,
+    "2.0": ClinicalStageCategory.PHASE_2,
     # PHASE_1_2 (Rank 8)
     "phase1/phase2": ClinicalStageCategory.PHASE_1_2,
     "phase 1/2": ClinicalStageCategory.PHASE_1_2,
@@ -66,9 +69,11 @@ PHASE_TO_CATEGORY_MAP = {
     "phase 1": ClinicalStageCategory.PHASE_1,
     "phase 1b": ClinicalStageCategory.PHASE_1,
     "discontinued in phase 1": ClinicalStageCategory.PHASE_1,
+    "1.0": ClinicalStageCategory.PHASE_1,
     # EARLY_PHASE_1 (Rank 10)
     "early_phase1": ClinicalStageCategory.EARLY_PHASE_1,
     "phase 0": ClinicalStageCategory.EARLY_PHASE_1,
+    "0.5": ClinicalStageCategory.EARLY_PHASE_1,
     # IND (Rank 11)
     "ind submitted": ClinicalStageCategory.IND,
     "investigative": ClinicalStageCategory.IND,
@@ -82,6 +87,7 @@ PHASE_TO_CATEGORY_MAP = {
     "refused": ClinicalStageCategory.UNKNOWN,
     "withdrawn from rolling review": ClinicalStageCategory.UNKNOWN,
     "NA": ClinicalStageCategory.UNKNOWN,
+    "-1.0": ClinicalStageCategory.UNKNOWN,
 }
 
 
