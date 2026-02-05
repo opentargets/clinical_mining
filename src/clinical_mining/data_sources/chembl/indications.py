@@ -1,4 +1,4 @@
-"""Extraction of drug/indication relationships from ChEMBL Indications dataset."""
+"""Extraction of clinical reports from ChEMBL drug/indications dataset."""
 
 import polars as pl
 

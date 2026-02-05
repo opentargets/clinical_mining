@@ -114,6 +114,10 @@ class ClinicalReportSchema(BaseModel):
     type: ClinicalReportType = Field(
         default=None, description="The type of the report."
     )
+    year: int | None = Field(default=None, description="The year of the report.")
+    countries: list[str] | None = Field(
+        default=None, description="The countries where the report was conducted."
+    )
     url: str | None = Field(
         default=None, description="The URL of the report, e.g. in Dailymed."
     )
@@ -125,6 +129,9 @@ class ClinicalReportSchema(BaseModel):
     )
     drugs: list[AssociatedDrug] | None = Field(
         default=None, description="The drugs associated with the study."
+    )
+    sideEffects: list[AssociatedDisease] | None = Field(
+        default=None, description="The side effects associated with the report."
     )
     hasExpertReview: bool = Field(
         default=False,
