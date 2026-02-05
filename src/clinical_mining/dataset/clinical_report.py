@@ -105,6 +105,13 @@ def map_phase_to_category(phase: str | None, source: str) -> ClinicalStageCatego
     Returns:
         Standardised clinical status category
     """
+    withdrawn_values = [
+        k
+        for k, v in PHASE_TO_CATEGORY_MAP.items()
+        if v == ClinicalStageCategory.WITHDRAWN
+    ]
+    if phase in withdrawn_values:
+        return ClinicalStageCategory.WITHDRAWN
     if source in APPROVED_SOURCES:
         return ClinicalStageCategory.APPROVED
 
