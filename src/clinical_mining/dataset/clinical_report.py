@@ -84,6 +84,7 @@ PHASE_TO_CATEGORY_MAP = {
     "NA": ClinicalStageCategory.UNKNOWN,
 }
 
+
 # Sources that indicate approved status when phase is null
 APPROVED_SOURCES = {"ATC", "EMA", "FDA", "DailyMed", "PMDA"}
 
