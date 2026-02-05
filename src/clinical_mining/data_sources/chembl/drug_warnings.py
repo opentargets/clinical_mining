@@ -11,7 +11,7 @@ def extract_clinical_report(
     molecule_dictionary: pl.DataFrame,
     warning_refs: pl.DataFrame,
 ) -> ClinicalReport:
-    """Extract withdrawal clinical reports from ChEMBL drug warning dataset.
+    """Extract clinical reports from ChEMBL drug warning dataset.
 
     Args:
         drug_warning: Drug warning dataset
@@ -25,7 +25,6 @@ def extract_clinical_report(
     reports = (
         drug_warning.join(molecule_dictionary, "molregno")
         .join(warning_refs, "warning_id")
-        .filter(pl.col("warning_type") == "Withdrawn")
         .select(
             pl.concat_str(
                 # One reference can report multiple withdrawals
