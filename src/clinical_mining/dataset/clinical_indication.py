@@ -40,7 +40,7 @@ class ClinicalIndication:
         "diseaseId",
     }
 
-    def __init__(self, df: pl.DataFrame, filter_by_mapping_status: bool = False):
+    def __init__(self, df: pl.DataFrame):
         """Initialises the dataset, validating and aligning the DataFrame.
 
         Also assigns mapping status and maximum clinical status.
@@ -51,11 +51,6 @@ class ClinicalIndication:
                 pl.col("drugId"), pl.col("diseaseId")
             ),
         )
-
-        if filter_by_mapping_status:
-            df = df.filter(pl.col("mappingStatus") == "FULLY_MAPPED").drop(
-                "drugName", "diseaseName", "mappingStatus"
-            )
         self.df = validate_schema(df, ClinicalIndicationSchema)
 
     @classmethod
@@ -64,9 +59,7 @@ class ClinicalIndication:
         return sorted(list(set(df.columns) - cls.AGGREGATION_FIELDS))
 
     @classmethod
-    def from_report(
-        cls, report: pl.DataFrame, filter_by_mapping_status: bool = False
-    ) -> "ClinicalIndication":
+    def from_report(cls, report: pl.DataFrame) -> "ClinicalIndication":
         """Aggregate drug/disease information collected in clinical report into a ClinicalIndication."""
         # Assert validity of reports
         report = validate_schema(report, ClinicalReportSchema)
@@ -103,7 +96,6 @@ class ClinicalIndication:
                     pl.col("clinicalStage").first().alias("maxClinicalStage"),
                 )
             ),
-            filter_by_mapping_status=filter_by_mapping_status,
         )
 
     @staticmethod

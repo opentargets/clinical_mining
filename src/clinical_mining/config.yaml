@@ -223,7 +223,7 @@ pipeline:
       function: clinical_mining.utils.polars_helpers.filter_df
       parameters:
         df: $chembl_drug_warning_report
-        expr: "warning_type == 'Withdrawn'"
+        expr: "type == 'Withdrawn'"
 
     - name: all_reports
       function: clinical_mining.utils.polars_helpers.union_dfs
@@ -248,4 +248,4 @@ pipeline:
       function: clinical_mining.dataset.ClinicalIndication.from_report
       parameters:
         report: $output_clinical_report
-        filter_by_mapping_status: true
+
