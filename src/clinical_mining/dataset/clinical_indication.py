@@ -11,8 +11,8 @@ from clinical_mining.schemas import (
 # Category ranking for Maximum Clinical Development Status
 CATEGORY_RANKS = {
     ClinicalStageCategory.WITHDRAWN: 1,
-    ClinicalStageCategory.APPROVED: 2,
-    ClinicalStageCategory.PHASE_4: 3,
+    ClinicalStageCategory.PHASE_4: 2,
+    ClinicalStageCategory.APPROVED: 3,
     ClinicalStageCategory.PREAPPROVAL: 4,
     ClinicalStageCategory.PHASE_3: 5,
     ClinicalStageCategory.PHASE_2_3: 6,
