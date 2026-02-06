@@ -79,7 +79,10 @@ def _init_oracle_client(lib_dir: str | None = None) -> None:
     Safe to call multiple times; cx_Oracle will ignore subsequent inits.
     """
     if lib_dir:
-        import cx_Oracle
+        try:
+            import cx_Oracle  # type: ignore[import-not-found]
+        except ImportError:
+            return
 
         try:
             cx_Oracle.init_oracle_client(lib_dir=lib_dir)
@@ -100,7 +103,10 @@ def load_oracle_query(
 
     Uses cx_Oracle connection with Polars' read_database().
     """
-    import cx_Oracle
+    try:
+        import cx_Oracle  # type: ignore[import-not-found]
+    except ImportError as e:
+        raise ImportError("cx_Oracle is required to use Oracle utilities") from e
 
     # Create connection
     _init_oracle_client(init_client_lib_dir)
@@ -150,7 +156,10 @@ def load_oracle_table(
         limit=limit,
         dialect="oracle",
     )
-    import cx_Oracle
+    try:
+        import cx_Oracle  # type: ignore[import-not-found]
+    except ImportError as e:
+        raise ImportError("cx_Oracle is required to use Oracle utilities") from e
 
     # Create connection
     _init_oracle_client(init_client_lib_dir)

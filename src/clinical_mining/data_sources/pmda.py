@@ -7,10 +7,10 @@ from loguru import logger
 from ontoma.ner.disease import extract_disease_entities
 from clinical_mining.utils.polars_helpers import convert_polars_to_spark
 
-from clinical_mining.utils.spark_helpers import spark_session
 from clinical_mining.dataset import ClinicalReport
 from clinical_mining.schemas import ClinicalReportType
 import polars_hash as plh
+from pyspark.sql import SparkSession
 
 
 # ============================================================================
@@ -222,6 +222,8 @@ def is_approval_row(approval_value: str, has_approval_column: bool) -> bool:
     if "approval" in approval_value.lower():
         return True
 
+    return False
+
 
 # ============================================================================
 # MAIN PARSER
@@ -326,7 +328,7 @@ def parse_pmda_approvals(pmda_path: str) -> pl.DataFrame:
 
 def extract_clinical_report(
     df: pl.DataFrame,
-    spark: spark_session,
+    spark: SparkSession,
 ) -> ClinicalReport:
     """Extract clinical reports from PMDA approvals."""
     reports = (
