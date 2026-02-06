@@ -91,7 +91,6 @@ class ClinicalIndication:
                 .group_by(list(cls.AGGREGATION_FIELDS), maintain_order=True)
                 .agg(
                     pl.col("clinicalReportId").unique().alias("clinicalReportIds"),
-                    pl.col("hasExpertReview").any().alias("hasExpertReview"),
                     # Get the maximum clinical stage (minimum rank = highest priority)
                     pl.col("clinicalStage").first().alias("maxClinicalStage"),
                 )
