@@ -1,7 +1,12 @@
 """Polars-specific helper functions for the pipeline."""
 
+from typing import Literal
+
 import polars as pl
 from pyspark.sql import SparkSession, DataFrame
+
+
+JoinHow = Literal["inner", "left", "right", "full", "semi", "anti", "cross"]
 
 
 def convert_polars_to_spark(
@@ -56,7 +61,7 @@ def union_dfs(dfs: list[pl.DataFrame]) -> pl.DataFrame:
     return pl.concat(dfs, how="diagonal")
 
 
-def join_dfs(dfs: list[pl.DataFrame], join_on: str, how: str = "inner") -> pl.DataFrame:
+def join_dfs(dfs: list[pl.DataFrame], join_on: str, how: JoinHow = "inner") -> pl.DataFrame:
     """Joins a list of Polars DataFrames on a common key.
 
     Args:

@@ -2,11 +2,13 @@
 
 import importlib
 
+from typing import Any, Callable
+
 from omegaconf import ListConfig
 import polars as pl
 
 
-def _params_reference_key(params: dict, key: str) -> bool:
+def _params_reference_key(params: dict[str, Any], key: str) -> bool:
     """Return True if a step's parameters reference a given data_store key.
 
     This inspects values like `$spark_session` and also lists containing such
@@ -23,7 +25,7 @@ def _params_reference_key(params: dict, key: str) -> bool:
     return False
 
 
-def _ensure_spark_session(data_store: dict[str, any]) -> None:
+def _ensure_spark_session(data_store: dict[str, Any]) -> None:
     """Ensure `data_store['spark_session']` is initialized.
 
     Spark is created lazily, only when a pipeline step explicitly references
@@ -40,7 +42,7 @@ def _ensure_spark_session(data_store: dict[str, any]) -> None:
     data_store["spark_session"] = spark_session()
 
 
-def _get_callable(function_path: str):
+def _get_callable(function_path: str) -> Callable[..., Any]:
     """Imports a function or static method from a string path.
 
     Supports both module-level functions and static/class methods within classes.
@@ -74,7 +76,7 @@ def _get_callable(function_path: str):
         raise ImportError(f"Could not import function '{function_path}': {e}")
 
 
-def _resolve_params(params: dict, data_store: dict) -> dict:
+def _resolve_params(params: dict[str, Any], data_store: dict[str, Any]) -> dict[str, Any]:
     """Resolves parameter values from the data_store.
 
     Args:
@@ -97,9 +99,9 @@ def _resolve_params(params: dict, data_store: dict) -> dict:
     return resolved_params
 
 def execute_step(
-    step: dict[str, any],
-    data_store: dict[str, any],
-) -> any:
+    step: dict[str, Any],
+    data_store: dict[str, Any],
+) -> Any:
     """Executes a single pipeline step and updates data_store to include the result.
 
     Args:
@@ -108,7 +110,7 @@ def execute_step(
     Returns:
         any: The result of the step execution.
     """
-    func = _get_callable(step.function)
+    func = _get_callable(step["function"])
     step_params = step.get("parameters", {})
     if _params_reference_key(step_params, "spark_session"):
         _ensure_spark_session(data_store)
@@ -118,5 +120,5 @@ def execute_step(
     result = func(**params)
     if not isinstance(result, pl.DataFrame) and hasattr(result, "df"):
         result = result.df
-    data_store[step.name] = result
+    data_store[step["name"]] = result
     return result

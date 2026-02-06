@@ -1,5 +1,6 @@
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import hydra
 from loguru import logger
@@ -14,7 +15,7 @@ from clinical_mining.utils.spark_helpers import spark_session
 @hydra.main(
     version_base="1.3", config_path=str(Path(__file__).parent), config_name="config"
 )
-def main(cfg: DictConfig) -> pl.DataFrame:
+def main(cfg: DictConfig) -> dict[str, Any]:
     """Main function to run the clinical mining pipeline."""
     data_store = {}
 

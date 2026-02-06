@@ -1,26 +1,30 @@
 import polars as pl
+from typing import cast
 
 from ontoma.ner.disease import extract_disease_entities
 
 from clinical_mining.utils.polars_helpers import convert_polars_to_spark
-from clinical_mining.utils.spark_helpers import spark_session
 from clinical_mining.schemas import ClinicalReportType
 from clinical_mining.dataset import ClinicalReport
 from loguru import logger
+from pyspark.sql import SparkSession
 
 
 def extract_clinical_report(
     indications_path: str,
-    spark: spark_session,
+    spark: SparkSession,
 ) -> ClinicalReport:
     """Extract clinical reports from the EMA list of human drugs."""
     raw = pl.read_excel(
         indications_path,
         sheet_name="Medicine",
     )
-    raw.columns = raw.iter_rows().__next__()  # Assign columns names from first row
+    if isinstance(raw, dict):
+        raw = raw["Medicine"]
+    raw_df = cast(pl.DataFrame, raw)
+    raw_df.columns = list(raw_df.iter_rows().__next__())  # Assign columns names from first row
 
-    human_indications = raw.slice(1).filter(  # drop header
+    human_indications = raw_df.slice(1).filter(  # drop header
         pl.col("Category") == "Human"
     )
 

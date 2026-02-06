@@ -5,10 +5,9 @@ from ontoma.ner._pipelines import get_device
 
 def spark_session() -> SparkSession:
     """OnToma works on Spark dataframes."""
-    try:
-        SparkSession.getActiveSession().stop()
-    except Exception:
-        pass
+    active = SparkSession.getActiveSession()
+    if active is not None:
+        active.stop()
     params = {
         "spark.driver.memory":"10g",
         "spark.driver.maxResultSize":"4g",
