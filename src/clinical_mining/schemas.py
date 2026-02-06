@@ -173,7 +173,4 @@ class ClinicalIndicationSchema(BaseModel):
         ...,
         description="List of clinical report IDs that support the association.",
     )
-    hasExpertReview: bool = Field(
-        default=False,
-        description="True if any of the supporting clinical reports has been reviewed by an expert.",
-    )
+
