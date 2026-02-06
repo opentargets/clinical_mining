@@ -86,15 +86,17 @@ class ClinicalReportType(str, Enum):
 
 
 class AssociatedDrug(BaseModel):
-    drugFromSource: str = Field(..., description="The drug label used at the source.")
-    drugId: str | None = Field(..., description="The assigned drug ID.")
+    drugFromSource: str | None = Field(
+        default=None, description="The drug label used at the source."
+    )
+    drugId: str | None = Field(default=None, description="The assigned drug ID.")
 
 
 class AssociatedDisease(BaseModel):
-    diseaseFromSource: str = Field(
-        ..., description="The disease label used at the source."
+    diseaseFromSource: str | None = Field(
+        description="The disease label used at the source."
     )
-    diseaseId: str | None = Field(..., description="The assigned disease ID.")
+    diseaseId: str | None = Field(description="The assigned disease ID.")
 
 
 class ClinicalReportSchema(BaseModel):
@@ -111,9 +113,7 @@ class ClinicalReportSchema(BaseModel):
     phaseFromSource: str | None = Field(
         default=None, description="The phase of the report at the source."
     )
-    type: ClinicalReportType = Field(
-        default=None, description="The type of the report."
-    )
+    type: ClinicalReportType = Field(description="The type of the report.")
     year: int | None = Field(default=None, description="The year of the report.")
     countries: list[str] | None = Field(
         default=None, description="The countries where the report was conducted."
@@ -121,14 +121,12 @@ class ClinicalReportSchema(BaseModel):
     url: str | None = Field(
         default=None, description="The URL of the report, e.g. in Dailymed."
     )
-    source: ClinicalSource = Field(
-        default=None, description="The data source of the report."
-    )
+    source: ClinicalSource = Field(description="The data source of the report.")
     diseases: list[AssociatedDisease] | None = Field(
         default=None, description="The diseases associated with the report."
     )
-    drugs: list[AssociatedDrug] | None = Field(
-        default=None, description="The drugs associated with the study."
+    drugs: list[AssociatedDrug] = Field(
+        description="The drugs associated with the study."
     )
     sideEffects: list[AssociatedDisease] | None = Field(
         default=None, description="The side effects associated with the report."
@@ -173,4 +171,3 @@ class ClinicalIndicationSchema(BaseModel):
         ...,
         description="List of clinical report IDs that support the association.",
     )
-
