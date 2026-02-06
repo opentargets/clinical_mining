@@ -104,9 +104,9 @@ class ClinicalIndication:
         return (
             pl.when((drug_id_column.is_not_null()) & (disease_id_column.is_not_null()))
             .then(pl.lit("FULLY_MAPPED"))
-            .when((pl.col("drugId").is_not_null()) & (pl.col("diseaseId").is_null()))
+            .when((drug_id_column.is_not_null()) & (disease_id_column.is_null()))
             .then(pl.lit("DRUG_MAPPED"))
-            .when((pl.col("drugId").is_null()) & (pl.col("diseaseId").is_not_null()))
+            .when((drug_id_column.is_null()) & (disease_id_column.is_not_null()))
             .then(pl.lit("DISEASE_MAPPED"))
             .otherwise(pl.lit("UNMAPPED"))
         )
