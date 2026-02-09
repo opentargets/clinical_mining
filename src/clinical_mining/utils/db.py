@@ -1,6 +1,14 @@
 from loguru import logger
 import polars as pl
 
+# Optional Oracle dependency handling
+try:
+    import cx_Oracle  # type: ignore[import-not-found]
+    _ORACLE_AVAILABLE = True
+except ImportError:
+    cx_Oracle = None
+    _ORACLE_AVAILABLE = False
+
 
 def construct_db_uri(
     db_type: str, db_uri: str, db_user: str | None = None, db_password: str | None = None
@@ -78,12 +86,10 @@ def _init_oracle_client(lib_dir: str | None = None) -> None:
 
     Safe to call multiple times; cx_Oracle will ignore subsequent inits.
     """
-    if lib_dir:
-        try:
-            import cx_Oracle  # type: ignore[import-not-found]
-        except ImportError:
-            return
-
+    if not _ORACLE_AVAILABLE:
+        return
+        
+    if lib_dir and cx_Oracle:
         try:
             cx_Oracle.init_oracle_client(lib_dir=lib_dir)
         except Exception:
@@ -102,11 +108,15 @@ def load_oracle_query(
     """Execute a SQL query against Oracle and return a Polars DataFrame.
 
     Uses cx_Oracle connection with Polars' read_database().
+    
+    Raises:
+        ImportError: If cx-oracle is not installed. Install with: pip install clinical-mining[oracle]
     """
-    try:
-        import cx_Oracle  # type: ignore[import-not-found]
-    except ImportError as e:
-        raise ImportError("cx_Oracle is required to use Oracle utilities") from e
+    if not _ORACLE_AVAILABLE:
+        raise ImportError(
+            "cx-oracle is required to use Oracle utilities. "
+            "Install with: uv add --optional oracle cx-oracle"
+        )
 
     # Create connection
     _init_oracle_client(init_client_lib_dir)
@@ -148,7 +158,16 @@ def load_oracle_table(
             limit=5,
             init_client_lib_dir="/opt/oracle/instantclient_23_3",
         )
+        
+    Raises:
+        ImportError: If cx-oracle is not installed. Install with: pip install clinical-mining[oracle]
     """
+    if not _ORACLE_AVAILABLE:
+        raise ImportError(
+            "cx-oracle is required to use Oracle utilities. "
+            "Install with: uv add --optional oracle cx-oracle"
+        )
+        
     query = _build_select_query(
         table_name=table_name,
         db_schema=db_schema,
@@ -156,10 +175,6 @@ def load_oracle_table(
         limit=limit,
         dialect="oracle",
     )
-    try:
-        import cx_Oracle  # type: ignore[import-not-found]
-    except ImportError as e:
-        raise ImportError("cx_Oracle is required to use Oracle utilities") from e
 
     # Create connection
     _init_oracle_client(init_client_lib_dir)

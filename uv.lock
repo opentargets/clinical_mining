@@ -223,7 +223,6 @@ source = { editable = "." }
 dependencies = [
     { name = "altair" },
     { name = "connectorx" },
-    { name = "cx-oracle" },
     { name = "fastexcel" },
     { name = "hydra-core" },
     { name = "ipykernel" },
@@ -242,12 +241,15 @@ dependencies = [
 dev = [
     { name = "ty" },
 ]
+oracle = [
+    { name = "cx-oracle" },
+]
 
 [package.metadata]
 requires-dist = [
     { name = "altair", specifier = ">=5.5.0" },
     { name = "connectorx", specifier = ">=0.4.3" },
-    { name = "cx-oracle", specifier = ">=8.3.0" },
+    { name = "cx-oracle", marker = "extra == 'oracle'", specifier = ">=8.3.0" },
     { name = "fastexcel", specifier = ">=0.16.0" },
     { name = "hydra-core", specifier = ">=1.3.2" },
     { name = "ipykernel", specifier = ">=6.29.5" },
@@ -262,7 +264,7 @@ requires-dist = [
     { name = "sqlalchemy", specifier = ">=2.0.42" },
     { name = "ty", marker = "extra == 'dev'", specifier = ">=0.0.15" },
 ]
-provides-extras = ["dev"]
+provides-extras = ["dev", "oracle"]
 
 [[package]]
 name = "colorama"
