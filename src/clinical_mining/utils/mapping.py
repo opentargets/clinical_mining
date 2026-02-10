@@ -103,9 +103,9 @@ def map_entities(
     df: pl.DataFrame,
     disease_index: DataFrame,
     drug_index: DataFrame,
-    chembl_curation: pl.DataFrame,
-    drug_column_name: str,
-    disease_column_name: str,
+    chembl_curation: pl.DataFrame | None = None,
+    drug_column_name: str = "drugFromSource",
+    disease_column_name: str = "diseaseFromSource",
     drug_id_column_name: str = "drugId",
     disease_id_column_name: str = "diseaseId",
     ner_extract_drug: bool = True,
@@ -150,26 +150,24 @@ def map_entities(
     # Create entity lookup tables
     disease_label_lut = OpenTargetsDisease.as_label_lut(disease_index)
     drug_label_lut = OpenTargetsDrug.as_label_lut(drug_index)
+    lut_tables = [disease_label_lut, drug_label_lut]
 
     # Create curation lookup tables using the helper function
-    chembl_curation_spark = convert_polars_to_spark(chembl_curation, spark)
-    # curation_lut_disease = _create_curation_lut(
-    #     chembl_curation_spark, "diseaseId", "diseaseFromSource", "DS"
-    # )
-    curation_lut_drug = _create_curation_lut(
-        chembl_curation_spark, "drugId", "drugFromSource", "CD"
-    )
+    if chembl_curation is not None:
+        chembl_curation_spark = convert_polars_to_spark(chembl_curation, spark)
+        curation_lut_disease = _create_curation_lut(
+            chembl_curation_spark, "diseaseId", "diseaseFromSource", "DS"
+        )
+        curation_lut_drug = _create_curation_lut(
+            chembl_curation_spark, "drugId", "drugFromSource", "CD"
+        )
+        lut_tables.extend([curation_lut_disease, curation_lut_drug])
 
     # STEP 1: Dictionary mapping (curation + indices)
     # This maps ~50% of drugs and diseases
     ontoma = OnToma(
         spark=spark,
-        entity_lut_list=[
-            disease_label_lut,
-            drug_label_lut,
-            # curation_lut_disease,
-            curation_lut_drug,
-        ],
+        entity_lut_list=lut_tables,
     )
     mapping_results = ontoma.map_entities(
         df=query_df,
