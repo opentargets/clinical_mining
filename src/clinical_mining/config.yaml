@@ -121,6 +121,7 @@ inputs:
     select_cols:
       - molregno
       - chembl_id
+      - pref_name
 
   drug_warning:
     format: db_table

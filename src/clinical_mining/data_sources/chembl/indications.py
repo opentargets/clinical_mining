@@ -57,7 +57,7 @@ def extract_clinical_report(
                 pl.col("efo_term").str.to_lowercase().alias("diseaseFromSource"),
             ).alias("disease"),
             pl.struct(
-                pl.lit(None, dtype=pl.String).alias("drugFromSource"),
+                pl.col("pref_name").alias("drugFromSource"),
                 pl.col("chembl_id").alias("drugId"),
             ).alias("drug"),
         )
