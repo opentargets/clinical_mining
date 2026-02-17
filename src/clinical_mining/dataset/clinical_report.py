@@ -144,6 +144,10 @@ class ClinicalReport:
 
         self.df = validate_schema(df, ClinicalReportSchema)
 
+    def pipe(self, func: callable, *args, **kwargs) -> "ClinicalReport":
+        """Apply a function to the dataset."""
+        return func(self, *args, **kwargs)
+
     @classmethod
     def drop_duplicates(cls, df: pl.DataFrame) -> pl.DataFrame:
         """Drop duplicate reports based on clinical stage."""
