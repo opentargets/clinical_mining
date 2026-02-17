@@ -38,7 +38,7 @@ def extract_clinical_report(
                 pl.col("efo_term").alias("diseaseFromSource"),
             ).alias("sideEffect"),
             pl.struct(
-                pl.lit(None).alias("drugFromSource"),
+                pl.col("pref_name").alias("drugFromSource"),
                 pl.col("chembl_id").alias("drugId"),
             ).alias("drug"),
             pl.col("warning_year").alias("year"),
