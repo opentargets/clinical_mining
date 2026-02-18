@@ -24,13 +24,13 @@ PHASE_TO_CATEGORY_MAP = {
     "phase 4": ClinicalStageCategory.PHASE_4,
     "discontinued in phase 4": ClinicalStageCategory.PHASE_4,
     "4.0": ClinicalStageCategory.PHASE_4,
-    # APPROVED (Rank 3)
-    "approved": ClinicalStageCategory.APPROVED,
-    "authorised": ClinicalStageCategory.APPROVED,
-    "approved (orphan drug)": ClinicalStageCategory.APPROVED,
-    "approved in china": ClinicalStageCategory.APPROVED,
-    "approved in eu": ClinicalStageCategory.APPROVED,
-    "registered": ClinicalStageCategory.APPROVED,
+    # APPROVAL (Rank 3)
+    "approved": ClinicalStageCategory.APPROVAL,
+    "authorised": ClinicalStageCategory.APPROVAL,
+    "approved (orphan drug)": ClinicalStageCategory.APPROVAL,
+    "approved in china": ClinicalStageCategory.APPROVAL,
+    "approved in eu": ClinicalStageCategory.APPROVAL,
+    "registered": ClinicalStageCategory.APPROVAL,
     # PREAPPROVAL (Rank 4)
     "preregistration": ClinicalStageCategory.PREAPPROVAL,
     "application submitted": ClinicalStageCategory.PREAPPROVAL,
@@ -92,7 +92,7 @@ PHASE_TO_CATEGORY_MAP = {
 
 
 # Sources that indicate approved status when phase is null
-APPROVED_SOURCES = {"ATC", "EMA", "FDA", "DailyMed", "PMDA"}
+APPROVAL_SOURCES = {"ATC", "EMA", "FDA", "DailyMed", "PMDA"}
 
 
 def map_phase_to_category(phase: str | None, source: str) -> ClinicalStageCategory:
@@ -112,8 +112,8 @@ def map_phase_to_category(phase: str | None, source: str) -> ClinicalStageCatego
     ]
     if phase in withdrawn_values:
         return ClinicalStageCategory.WITHDRAWN
-    if source in APPROVED_SOURCES:
-        return ClinicalStageCategory.APPROVED
+    if source in APPROVAL_SOURCES:
+        return ClinicalStageCategory.APPROVAL
 
     # Handle case-insensitive mapping
     phase_lower = phase.lower() if isinstance(phase, str) else str(phase).lower()
