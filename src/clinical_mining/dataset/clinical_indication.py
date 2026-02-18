@@ -12,7 +12,7 @@ from clinical_mining.schemas import (
 CATEGORY_RANKS = {
     ClinicalStageCategory.WITHDRAWN: 1,
     ClinicalStageCategory.PHASE_4: 2,
-    ClinicalStageCategory.APPROVED: 3,
+    ClinicalStageCategory.APPROVAL: 3,
     ClinicalStageCategory.PREAPPROVAL: 4,
     ClinicalStageCategory.PHASE_3: 5,
     ClinicalStageCategory.PHASE_2_3: 6,
