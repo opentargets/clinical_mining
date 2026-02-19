@@ -4,9 +4,34 @@ from typing import Literal
 
 import polars as pl
 from pyspark.sql import SparkSession, DataFrame
+from pyspark.sql.types import (
+    StructType,
+    StructField,
+    StringType,
+    IntegerType,
+    LongType,
+    DoubleType,
+    BooleanType,
+    DateType,
+    TimestampType,
+)
 
 
 JoinHow = Literal["inner", "left", "right", "full", "semi", "anti", "cross"]
+
+
+def polars_to_spark_type(polars_type):
+    """Map Polars data types to PySpark data types."""
+    type_mapping = {
+        pl.String: StringType(),
+        pl.Int32: IntegerType(),
+        pl.Int64: LongType(),
+        pl.Float64: DoubleType(),
+        pl.Boolean: BooleanType(),
+        pl.Date: DateType(),
+        pl.Datetime: TimestampType(),
+    }
+    return type_mapping.get(polars_type, StringType())  # Default to String if unmapped
 
 
 def convert_polars_to_spark(
@@ -21,20 +46,26 @@ def convert_polars_to_spark(
         chunk_size: Number of rows per chunk (100k works best for 1M+ row DataFrames)
 
     Returns:
-        Spark DataFrame with optimized partitioning
+        Spark DataFrame with optimized partitioning and preserved schema
     """
+    # Extract and convert schema from Polars
+    spark_schema = StructType([
+        StructField(name, polars_to_spark_type(dtype), True)
+        for name, dtype in polars_df.schema.items()
+    ])
+    
     total_rows = len(polars_df)
 
     if total_rows <= chunk_size:
-        # For small DataFrames, use direct conversion
-        return spark.createDataFrame(polars_df.to_pandas())
+        # For small DataFrames, use direct conversion with schema
+        return spark.createDataFrame(polars_df.to_pandas(), schema=spark_schema)
 
     # Process in chunks for large DataFrames
     spark_chunks = []
 
     for i in range(0, total_rows, chunk_size):
         chunk = polars_df.slice(i, chunk_size)
-        chunk_spark = spark.createDataFrame(chunk.to_pandas())
+        chunk_spark = spark.createDataFrame(chunk.to_pandas(), schema=spark_schema)
         spark_chunks.append(chunk_spark)
 
     # Union all chunks into single DataFrame
@@ -61,7 +92,9 @@ def union_dfs(dfs: list[pl.DataFrame]) -> pl.DataFrame:
     return pl.concat(dfs, how="diagonal")
 
 
-def join_dfs(dfs: list[pl.DataFrame], join_on: str, how: JoinHow = "inner") -> pl.DataFrame:
+def join_dfs(
+    dfs: list[pl.DataFrame], join_on: str, how: JoinHow = "inner"
+) -> pl.DataFrame:
     """Joins a list of Polars DataFrames on a common key.
 
     Args:
@@ -83,35 +116,37 @@ def join_dfs(dfs: list[pl.DataFrame], join_on: str, how: JoinHow = "inner") -> p
 
 
 def coalesce_column(
-    df: pl.DataFrame, output_column_name: str, input_column_names: list[str], drop: bool = False
+    df: pl.DataFrame,
+    output_column_name: str,
+    input_column_names: list[str],
+    drop: bool = False,
 ) -> pl.DataFrame:
     """Safely coalesces multiple columns into a single column, filling missing values with null. Note that order of input columns is important.
-    
+
     Raises:
         ValueError: If none of the input_column_names exist in the DataFrame
     """
     existing_columns = [col for col in input_column_names if col in df.columns]
-    
+
     # Raise error if none of the columns exist
     if not existing_columns:
         raise ValueError(
             f"None of the input columns {input_column_names} exist in the DataFrame. "
             f"Available columns: {df.columns}"
         )
-    
+
     # Coalesce only the existing columns
-    df = df.with_columns(
-        pl.coalesce(*existing_columns).alias(output_column_name)
-    )
+    df = df.with_columns(pl.coalesce(*existing_columns).alias(output_column_name))
     return df.drop(existing_columns) if drop else df
+
 
 def filter_df(df: pl.DataFrame, expr: str | pl.Expr) -> pl.DataFrame:
     """Filters a Polars DataFrame based on a condition.
-    
+
     Args:
         df (pl.DataFrame): The DataFrame to filter.
         expr (str | pl.Expr): The condition to filter by. Can be a string expression
-    
+
     Returns:
         pl.DataFrame: The filtered DataFrame.
     """
@@ -122,5 +157,3 @@ def filter_df(df: pl.DataFrame, expr: str | pl.Expr) -> pl.DataFrame:
     ctx.register("df", df)
 
     return ctx.execute(f"SELECT * FROM df WHERE {expr}").collect()
-
-
