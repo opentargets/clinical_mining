@@ -52,7 +52,7 @@ class ClinicalSource(str, Enum):
 class ClinicalStageCategory(str, Enum):
     """Standardised clinical development status categories, ranked by development stage."""
 
-    WITHDRAWN = "WITHDRAWN"
+    WITHDRAWAL = "WITHDRAWAL"
     APPROVAL = "APPROVAL"
     PHASE_4 = "PHASE_4"
     PREAPPROVAL = "PREAPPROVAL"
