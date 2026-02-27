@@ -40,6 +40,8 @@ def extract_clinical_report(
             .then(pl.lit(ClinicalReportType.CLINICAL_TRIAL))
             .when(pl.col("ref_type") == "DailyMed")
             .then(pl.lit(ClinicalReportType.DRUG_LABEL))
+            .when(pl.col("ref_type").is_in(["FDA", "EMA"]))
+            .then(pl.lit(ClinicalReportType.REGULATORY))
             .otherwise(pl.lit(ClinicalReportType.CURATED_RESOURCE))
             .alias("type"),
             pl.when(pl.col("ref_type") == "ClinicalTrials")
