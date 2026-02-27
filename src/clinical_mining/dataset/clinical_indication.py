@@ -73,7 +73,7 @@ class ClinicalIndication:
                     clinicalStageForMax=pl.when(
                         pl.col("clinicalStage").is_in(
                             [
-                                ClinicalStageCategory.WITHDRAWN.value,
+                                ClinicalStageCategory.WITHDRAWAL.value,
                                 ClinicalStageCategory.PHASE_4.value,
                                 ClinicalStageCategory.APPROVAL.value,
                             ]

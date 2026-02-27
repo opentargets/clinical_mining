@@ -12,13 +12,13 @@ from pyspark.sql import DataFrame, SparkSession
 
 # Clinical status harmonization constants
 PHASE_TO_CATEGORY_MAP = {
-    # WITHDRAWN (Rank 1)
-    "withdrawn": ClinicalStageCategory.WITHDRAWN,
-    "withdrawn from market": ClinicalStageCategory.WITHDRAWN,
-    "revoked": ClinicalStageCategory.WITHDRAWN,
-    "expired": ClinicalStageCategory.WITHDRAWN,
-    "lapsed": ClinicalStageCategory.WITHDRAWN,
-    "suspended": ClinicalStageCategory.WITHDRAWN,
+    # WITHDRAWAL (Rank 1)
+    "withdrawn": ClinicalStageCategory.WITHDRAWAL,
+    "withdrawn from market": ClinicalStageCategory.WITHDRAWAL,
+    "revoked": ClinicalStageCategory.WITHDRAWAL,
+    "expired": ClinicalStageCategory.WITHDRAWAL,
+    "lapsed": ClinicalStageCategory.WITHDRAWAL,
+    "suspended": ClinicalStageCategory.WITHDRAWAL,
     # PHASE_4 (Rank 2)
     "phase4": ClinicalStageCategory.PHASE_4,
     "phase 4": ClinicalStageCategory.PHASE_4,
@@ -108,10 +108,10 @@ def map_phase_to_category(phase: str | None, source: str) -> ClinicalStageCatego
     withdrawn_values = [
         k
         for k, v in PHASE_TO_CATEGORY_MAP.items()
-        if v == ClinicalStageCategory.WITHDRAWN
+        if v == ClinicalStageCategory.WITHDRAWAL
     ]
     if phase in withdrawn_values:
-        return ClinicalStageCategory.WITHDRAWN
+        return ClinicalStageCategory.WITHDRAWAL
     if source in APPROVAL_SOURCES:
         return ClinicalStageCategory.APPROVAL
 
