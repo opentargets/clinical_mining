@@ -33,12 +33,27 @@ def extract_clinical_report(
         # Some EMA references that are duplicated
         .filter(~pl.col("ref_url").str.starts_with("www"))
         .select(
-            pl.col("ref_id").str.split(",").alias("id"),
+            # INN references list multiple drugs, we split them so that a single report
+            # corresponds to a single drug-indication pair
+            pl.when(pl.col("ref_type") == "INN")
+            .then(
+                pl.concat_str(
+                    pl.col("ref_id"),
+                    pl.lit("/"),
+                    pl.col("efo_term"),
+                    pl.lit("/"),
+                    pl.col("pref_name"),
+                ).str.split(",")
+            )
+            .otherwise(pl.col("ref_id").str.split(","))
+            .alias("id"),
             pl.when(pl.col("ref_type").is_in(APPROVAL_SOURCES))
             .then(pl.lit(ClinicalStageCategory.APPROVAL))
             .when(pl.col("ref_type").is_in(["INN", "USAN"]))
             .then(pl.lit(ClinicalStageCategory.UNKNOWN))
-            .otherwise(pl.col("max_phase_for_ind").cast(pl.Float16).cast(pl.String))  # TODO: report to ChEMBL - ClinicalTrials phase won't be accurate
+            .otherwise(
+                pl.col("max_phase_for_ind").cast(pl.Float16).cast(pl.String)
+            )  # TODO: report to ChEMBL - ClinicalTrials phase won't be accurate
             .alias("phaseFromSource"),
             pl.when(pl.col("ref_type") == "ClinicalTrials")
             .then(pl.lit(ClinicalReportType.CLINICAL_TRIAL))
