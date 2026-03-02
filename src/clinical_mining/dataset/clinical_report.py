@@ -129,14 +129,15 @@ class ClinicalReport:
         # Harmonise column names from snake to camel case
         df = df.rename({col: snake_to_camel(col) for col in df.columns})
 
-        # Assign clinical stage
         df = df.with_columns(
+            # Assign clinical stage
             clinicalStage=pl.struct(["phaseFromSource", "source"]).map_elements(
                 lambda row: map_phase_to_category(
                     row["phaseFromSource"], row["source"]
                 ),
                 return_dtype=pl.String,
-            )
+            ),
+            id=pl.col("id").str.to_lowercase(),
         )
 
         # Drop duplicates by id, keeping the row with the best clinical stage
