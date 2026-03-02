@@ -34,7 +34,7 @@ def extract_clinical_report(
         .filter(~pl.col("ref_url").str.starts_with("www"))
         .select(
             pl.col("ref_id").str.split(",").alias("id"),
-            pl.when(pl.col("ref_type").is_in([APPROVAL_SOURCES]))
+            pl.when(pl.col("ref_type").is_in(APPROVAL_SOURCES))
             .then(pl.lit(ClinicalStageCategory.APPROVAL))
             .when(pl.col("ref_type").is_in(["INN", "USAN"]))
             .then(pl.lit(ClinicalStageCategory.UNKNOWN))
