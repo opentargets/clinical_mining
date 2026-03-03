@@ -271,7 +271,7 @@ def parse_table_with_structure(
     return records
 
 
-def parse_pmda_approvals(pmda_path: str | BytesIO) -> pl.DataFrame:
+def parse_pmda_approvals(pmda: str | BytesIO | pdfplumber.pdf.PDF) -> pl.DataFrame:
     """Parse PMDA drug approvals PDF into a Polars DataFrame.
 
     Only includes entries where approval type contains 'Approval'.
@@ -279,8 +279,14 @@ def parse_pmda_approvals(pmda_path: str | BytesIO) -> pl.DataFrame:
 
     all_records = []
     last_structure: ColumnStructure | None = None
+    
+    # Work-around for passing pdfplumber.pdf.PDF object directly for an OT release
+    if isinstance(pmda, pdfplumber.pdf.PDF):
+        pdf = pmda
+    else:
+        pdf = pdfplumber.open(pmda)
 
-    with pdfplumber.open(pmda_path) as pdf:
+    with pdf:
         for page_num, page in enumerate(pdf.pages, 1):
             logger.info(f"Processing page {page_num}/{len(pdf.pages)}")
 
