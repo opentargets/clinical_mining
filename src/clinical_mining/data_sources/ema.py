@@ -1,6 +1,5 @@
 import polars as pl
 from io import BytesIO
-from typing import cast
 
 from ontoma.ner.disease import extract_disease_entities
 
@@ -12,17 +11,18 @@ from pyspark.sql import SparkSession
 
 
 def extract_clinical_report(
-    indications_path: str | BytesIO,
+    indications: str | BytesIO | pl.DataFrame,
     spark: SparkSession,
 ) -> ClinicalReport:
     """Extract clinical reports from the EMA list of human drugs."""
-    raw = pl.read_excel(
-        indications_path,
-        sheet_name="Medicine",
-    )
-    if isinstance(raw, dict):
-        raw = raw["Medicine"]
-    raw_df = cast(pl.DataFrame, raw)
+    if isinstance(indications, pl.DataFrame):
+        raw_df = indications
+    else:
+        # TODO: remove this when we have a proper way to load the data
+        raw_df = pl.read_excel(
+            indications,
+            sheet_name="Medicine",
+        )
     raw_df.columns = list(raw_df.iter_rows().__next__())  # Assign columns names from first row
 
     human_indications = raw_df.slice(1).filter(  # drop header
