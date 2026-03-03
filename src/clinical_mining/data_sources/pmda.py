@@ -1,8 +1,9 @@
+from dataclasses import dataclass
+from io import BytesIO
+from loguru import logger
 import pdfplumber
 import polars as pl
 import re
-from dataclasses import dataclass
-from loguru import logger
 
 from ontoma.ner.disease import extract_disease_entities
 from clinical_mining.utils.polars_helpers import convert_polars_to_spark
@@ -270,7 +271,7 @@ def parse_table_with_structure(
     return records
 
 
-def parse_pmda_approvals(pmda_path: str) -> pl.DataFrame:
+def parse_pmda_approvals(pmda_path: str | BytesIO) -> pl.DataFrame:
     """Parse PMDA drug approvals PDF into a Polars DataFrame.
 
     Only includes entries where approval type contains 'Approval'.

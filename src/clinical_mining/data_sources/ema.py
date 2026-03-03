@@ -1,4 +1,5 @@
 import polars as pl
+from io import BytesIO
 from typing import cast
 
 from ontoma.ner.disease import extract_disease_entities
@@ -11,7 +12,7 @@ from pyspark.sql import SparkSession
 
 
 def extract_clinical_report(
-    indications_path: str,
+    indications_path: str | BytesIO,
     spark: SparkSession,
 ) -> ClinicalReport:
     """Extract clinical reports from the EMA list of human drugs."""
