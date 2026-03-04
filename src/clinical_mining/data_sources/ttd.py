@@ -4,10 +4,20 @@ from clinical_mining.dataset.clinical_report import ClinicalReport
 from clinical_mining.schemas import ClinicalReportType
 
 
-def read_input_file(input_file_path: str) -> pl.DataFrame:
-    """Read TTD Indications dataset into a Polars DataFrame."""
-    with open(input_file_path, "r", encoding="utf-8") as file:
-        lines = file.readlines()
+def extract_indication(ttd_input: str | list[str]) -> pl.DataFrame:
+    """Extract indications from TTD Indications dataset.
+    
+    Args:
+        ttd_input: Path to TTD Indications dataset or list of strings containing the dataset.
+    """
+    if isinstance(ttd_input, str):
+        # If input is a file path, read the file
+        with open(ttd_input, "r", encoding="utf-8") as file:
+            lines = file.readlines()
+    else:
+        # If input has already been read, use it as is
+        # This is necessary to run on Google Cloud
+        lines = ttd_input
 
     # Initialize variables
     data = []
@@ -50,12 +60,9 @@ def read_input_file(input_file_path: str) -> pl.DataFrame:
 
 
 def extract_clinical_report(
-    indications_path: str,
+    indications: pl.DataFrame,
 ) -> ClinicalReport:
     """Extract clinical reports from TTD drug/disease dataset."""
-
-    indications = read_input_file(indications_path)
-
     reports = indications.select(
         id=pl.concat_str(
             [pl.col("ttd_id"), pl.lit("/"), pl.col("diseaseFromSource")]
