@@ -197,7 +197,7 @@ def map_entities(
 
             if ner_cache_path is not None:
                 try:
-                    cached_ner = spark.read.parquet(str(ner_cache_path))
+                    cached_ner = spark.read.parquet(ner_cache_path)
                     cached_labels = cached_ner.select("query_label").distinct()
                     labels_to_process = unmapped_drugs.join(
                         cached_labels, on="query_label", how="left_anti"
@@ -229,7 +229,7 @@ def map_entities(
 
                 if ner_cache_path is not None:
                     logger.info(f"updating cache: {ner_cache_path}")
-                    ner_extracted_raw.write.mode("overwrite").parquet(str(ner_cache_path))
+                    ner_extracted_raw.toPandas().to_parquet(ner_cache_path)
             else:
                 logger.info(f"all {unmapped_count} labels found in cache, skipping ner extraction")
                 ner_extracted_raw = cached_ner
