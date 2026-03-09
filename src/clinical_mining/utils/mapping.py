@@ -2,7 +2,6 @@ from datetime import datetime
 
 from loguru import logger
 from ontoma import OnToma, OpenTargetsDisease, OpenTargetsDrug
-from ontoma.dataset.raw_entity_lut import RawEntityLUT
 from ontoma.ner.drug import extract_drug_entities
 import polars as pl
 from pyspark.sql import DataFrame, SparkSession
@@ -11,61 +10,162 @@ import pyspark.sql.functions as f
 from clinical_mining.utils.polars_helpers import convert_polars_to_spark
 
 
-def _create_curation_lut(
-    chembl_curation_df, entity_id_col: str, entity_name_col: str, entity_type: str
-) -> RawEntityLUT:
-    """Create a curation lookup table for a specific entity type.
+def _normalise_label_expr(col_name: str) -> pl.Expr:
+    """Normalise entity labels for robust matching."""
+    return (
+        pl.col(col_name)
+        .cast(pl.String)
+        .str.strip_chars()
+        .str.replace_all(r"\s+", " ")
+        .str.to_lowercase()
+    )
 
-    Args:
-        chembl_curation_df: Spark DataFrame with ChEMBL curation data
-        entity_id_col: Column name for entity ID (e.g., 'diseaseId', 'drugId')
-        entity_name_col: Column name for entity name (e.g., 'diseaseFromSource', 'drugFromSource')
-        entity_type: Entity type code ('DS' for disease, 'CD' for compound/drug)
 
-    Returns:
-        RawEntityLUT configured for the specific entity type
+def _apply_chembl_curation_mapping(
+    df: pl.DataFrame,
+    chembl_curation: pl.DataFrame,
+    drug_column_name: str,
+    disease_column_name: str,
+    drug_id_column_name: str,
+    disease_id_column_name: str,
+) -> pl.DataFrame:
+    """Map IDs directly from ChEMBL curation using study ID + label joins.
+
+    For duplicate curated matches on the same key, keep all curated IDs and explode
+    to one output row per curated ID combination.
     """
-    return RawEntityLUT(
-        _df=chembl_curation_df.select(
-            f.col(entity_id_col).alias("entityId"),
-            f.col(entity_name_col).alias("entityLabel"),
-            f.lit(1.0).alias("entityScore"),
-            f.lit("term").alias("nlpPipelineTrack"),
-            f.lit(entity_type).alias("entityType"),
-            f.lit("label").alias("entityKind"),
+    required_df_cols = {"id", drug_column_name, disease_column_name}
+    if not required_df_cols.issubset(df.columns):
+        missing = sorted(required_df_cols.difference(df.columns))
+        logger.warning(
+            "skipping chembl curation join, missing df columns: {}",
+            missing,
         )
-        .filter(f.col("entityId").isNotNull())
-        .distinct(),
-        _schema=RawEntityLUT.get_schema(),
+        return df
+
+    required_curation_cols = {
+        "studyId",
+        "drugFromSource",
+        "drugId",
+        "diseaseFromSource",
+        "diseaseId",
+    }
+    if not required_curation_cols.issubset(chembl_curation.columns):
+        missing = sorted(required_curation_cols.difference(chembl_curation.columns))
+        logger.warning(
+            "skipping chembl curation join, missing curation columns: {}",
+            missing,
+        )
+        return df
+
+    df_norm = df.with_columns(
+        _normalise_label_expr("id").alias("__study_id_norm"),
+        _normalise_label_expr(drug_column_name).alias("__drug_label_norm"),
+        _normalise_label_expr(disease_column_name).alias("__disease_label_norm"),
     )
 
-
-def _prepare_unified_query_df(df, drug_column: str, disease_column: str):
-    """Prepare a unified DataFrame with both drugs and diseases in a single column.
-
-    Args:
-        df: Spark DataFrame with a disease and a drug column
-        drug_column: Name of the column containing drug names
-        disease_column: Name of the column containing disease names
-
-    Returns:
-        Spark DataFrame with columns: query_label, entity_type
-    """
-    disease_df = (
-        df.filter(f.col(disease_column).isNotNull())
-        .select(
-            f.col(disease_column).alias("query_label"), f.lit("DS").alias("entity_type")
+    curation_drug_lut = (
+        chembl_curation.select("studyId", "drugFromSource", "drugId")
+        .drop_nulls(["studyId", "drugFromSource", "drugId"])
+        .with_columns(
+            _normalise_label_expr("studyId").alias("__study_id_norm"),
+            _normalise_label_expr("drugFromSource").alias("__drug_label_norm"),
+            pl.col("drugId").alias("__curated_drug_id"),
         )
-        .distinct()
-    )
-    drug_df = (
-        df.filter(f.col(drug_column).isNotNull())
-        .select(
-            f.col(drug_column).alias("query_label"), f.lit("CD").alias("entity_type")
+        .group_by(["__study_id_norm", "__drug_label_norm"])
+        .agg(
+            pl.col("__curated_drug_id")
+            .drop_nulls()
+            .unique()
+            .sort()
+            .alias("__curated_drug_ids")
         )
-        .distinct()
     )
-    return disease_df.union(drug_df)
+
+    curation_disease_lut = (
+        chembl_curation.select("studyId", "diseaseFromSource", "diseaseId")
+        .drop_nulls(["studyId", "diseaseFromSource", "diseaseId"])
+        .with_columns(
+            _normalise_label_expr("studyId").alias("__study_id_norm"),
+            _normalise_label_expr("diseaseFromSource").alias("__disease_label_norm"),
+            pl.col("diseaseId").alias("__curated_disease_id"),
+        )
+        .group_by(["__study_id_norm", "__disease_label_norm"])
+        .agg(
+            pl.col("__curated_disease_id")
+            .drop_nulls()
+            .unique()
+            .sort()
+            .alias("__curated_disease_ids")
+        )
+    )
+
+    joined = (
+        df_norm.join(
+            curation_drug_lut,
+            on=["__study_id_norm", "__drug_label_norm"],
+            how="left",
+        )
+        .join(
+            curation_disease_lut,
+            on=["__study_id_norm", "__disease_label_norm"],
+            how="left",
+        )
+    )
+
+    drug_filled_rows = joined.filter(
+        pl.col(drug_id_column_name).is_null() & pl.col("__curated_drug_ids").is_not_null()
+    ).height
+    disease_filled_rows = joined.filter(
+        pl.col(disease_id_column_name).is_null()
+        & pl.col("__curated_disease_ids").is_not_null()
+    ).height
+
+    mapped = (
+        joined.with_columns(
+            pl.when(pl.col(drug_id_column_name).is_not_null())
+            .then(pl.concat_list([pl.col(drug_id_column_name)]))
+            .otherwise(pl.col("__curated_drug_ids"))
+            .alias("__resolved_drug_ids"),
+            pl.when(pl.col(disease_id_column_name).is_not_null())
+            .then(pl.concat_list([pl.col(disease_id_column_name)]))
+            .otherwise(pl.col("__curated_disease_ids"))
+            .alias("__resolved_disease_ids"),
+        )
+        .with_columns(
+            pl.when(pl.col("__resolved_drug_ids").is_null())
+            .then(pl.lit([None], dtype=pl.List(pl.String)))
+            .otherwise(pl.col("__resolved_drug_ids"))
+            .alias("__resolved_drug_ids"),
+            pl.when(pl.col("__resolved_disease_ids").is_null())
+            .then(pl.lit([None], dtype=pl.List(pl.String)))
+            .otherwise(pl.col("__resolved_disease_ids"))
+            .alias("__resolved_disease_ids"),
+        )
+        .explode("__resolved_drug_ids")
+        .explode("__resolved_disease_ids")
+        .with_columns(
+            pl.col("__resolved_drug_ids").alias(drug_id_column_name),
+            pl.col("__resolved_disease_ids").alias(disease_id_column_name),
+        )
+        .drop(
+            "__study_id_norm",
+            "__drug_label_norm",
+            "__disease_label_norm",
+            "__curated_drug_ids",
+            "__curated_disease_ids",
+            "__resolved_drug_ids",
+            "__resolved_disease_ids",
+        )
+    )
+
+    logger.info(
+        "chembl curation direct join filled drugId for {} rows and diseaseId for {} rows before explode",
+        drug_filled_rows,
+        disease_filled_rows,
+    )
+
+    return mapped
 
 
 def _process_mapping_results(mapped_spark_df) -> pl.DataFrame:
@@ -113,11 +213,10 @@ def map_entities(
 ) -> pl.DataFrame:
     """Map drug and disease entities to their standardised IDs using OnToma.
 
-    This function uses a tiered approach for drug mapping:
-    1. First attempt: Dictionary mapping using curation and drug indices
-    2. Second attempt (if ner_extract_drug=True): NER extraction for unmapped drugs
-
-    Disease mapping always uses dictionary approach only.
+    This function uses a tiered mapping approach:
+    1. Direct mapping from ChEMBL curation using study ID + source labels (when available)
+    2. Dictionary mapping with Open Targets indices for remaining unmapped labels
+    3. NER fallback for still-unmapped drug labels (optional)
 
     Args:
         spark (SparkSession): Spark session for OnToma
@@ -136,34 +235,59 @@ def map_entities(
     Returns:
         pl.DataFrame: Polars DataFrame with a diseaseId and drugId populated if there is an OnToma match
     """
-    # Prepare unified query DataFrame and with essential columns for OnToma processing
-    query_df = _prepare_unified_query_df(
-        convert_polars_to_spark(
-            df.select(drug_column_name, disease_column_name).unique(),
-            spark,
-        ),
-        drug_column_name,
-        disease_column_name,
-    ).repartition(50, "entity_type")
+    # Some upstream datasets may not yet have ID columns (e.g. `diseaseId`/`drugId`).
+    # Ensure they exist before we attempt to coalesce them with newly mapped IDs.
+    missing_id_cols: list[pl.Expr] = []
+    if disease_id_column_name not in df.columns:
+        missing_id_cols.append(pl.lit(None).cast(pl.String).alias(disease_id_column_name))
+    if drug_id_column_name not in df.columns:
+        missing_id_cols.append(pl.lit(None).cast(pl.String).alias(drug_id_column_name))
+    if missing_id_cols:
+        df = df.with_columns(*missing_id_cols)
+
+    # Fill IDs from ChEMBL curation first using deterministic study+label joins.
+    if chembl_curation is not None:
+        df = _apply_chembl_curation_mapping(
+            df=df,
+            chembl_curation=chembl_curation,
+            drug_column_name=drug_column_name,
+            disease_column_name=disease_column_name,
+            drug_id_column_name=drug_id_column_name,
+            disease_id_column_name=disease_id_column_name,
+        )
+
+    # Build dictionary queries only for unresolved labels.
+    disease_queries = (
+        df.filter(
+            pl.col(disease_column_name).is_not_null()
+            & pl.col(disease_id_column_name).is_null()
+        )
+        .select(pl.col(disease_column_name).alias("query_label"))
+        .with_columns(pl.lit("DS").alias("entity_type"))
+        .unique()
+    )
+    drug_queries = (
+        df.filter(pl.col(drug_column_name).is_not_null() & pl.col(drug_id_column_name).is_null())
+        .select(pl.col(drug_column_name).alias("query_label"))
+        .with_columns(pl.lit("CD").alias("entity_type"))
+        .unique()
+    )
+
+    query_inputs = [q for q in [disease_queries, drug_queries] if q.height > 0]
+    if not query_inputs:
+        logger.info("all entities already mapped after curation and existing IDs")
+        return df
+
+    query_df = convert_polars_to_spark(pl.concat(query_inputs), spark).repartition(
+        50, "entity_type"
+    )
 
     # Create entity lookup tables
     disease_label_lut = OpenTargetsDisease.as_label_lut(disease_index)
     drug_label_lut = OpenTargetsDrug.as_label_lut(drug_index)
     lut_tables = [disease_label_lut, drug_label_lut]
 
-    # Create curation lookup tables using the helper function
-    if chembl_curation is not None:
-        chembl_curation_spark = convert_polars_to_spark(chembl_curation, spark)
-        curation_lut_disease = _create_curation_lut(
-            chembl_curation_spark, "diseaseId", "diseaseFromSource", "DS"
-        )
-        curation_lut_drug = _create_curation_lut(
-            chembl_curation_spark, "drugId", "drugFromSource", "CD"
-        )
-        lut_tables.extend([curation_lut_disease, curation_lut_drug])
-
-    # STEP 1: Dictionary mapping (curation + indices)
-    # This maps ~50% of drugs and diseases
+    # STEP 1: Dictionary mapping with Open Targets indices
     ontoma = OnToma(
         spark=spark,
         entity_lut_list=lut_tables,
@@ -234,35 +358,40 @@ def map_entities(
                 logger.info(f"all {unmapped_count} labels found in cache, skipping ner extraction")
                 ner_extracted_raw = cached_ner
 
-            ner_extracted = ner_extracted_raw.filter(
-                f.size("extracted_drugs") > 0
-            ).select(
-                f.col("query_label"),
-                f.explode("extracted_drugs").alias("clean_label"),
-            )
-
-            # Map the cleaned labels with new OnToma instance (faster and safer for clean drug names)
-            ontoma_clean = OnToma(spark=spark, entity_lut_list=[drug_label_lut])
-            ner_mapped = ontoma_clean.map_entities(
-                df=ner_extracted,
-                result_col_name="mapped_ids",
-                entity_col_name="clean_label",
-                entity_kind="label",
-                type_col=f.lit("CD"),
-            )
-
-            # Aggregate: original label → list of mapped IDs
-            ner_aggregated = (
-                ner_mapped.filter(
-                    f.col("mapped_ids").isNotNull() & (f.size("mapped_ids") > 0)
+            if ner_extracted_raw is None:
+                logger.info("ner cache returned no rows, skipping ner fallback")
+                ner_aggregated = spark.createDataFrame([], "query_label string, ner_mapped_ids array<string>")
+            else:
+                assert ner_extracted_raw is not None
+                ner_extracted = ner_extracted_raw.filter(
+                    f.size("extracted_drugs") > 0
+                ).select(
+                    f.col("query_label"),
+                    f.explode("extracted_drugs").alias("clean_label"),
                 )
-                .groupBy("query_label")
-                .agg(
-                    f.array_distinct(f.flatten(f.collect_list("mapped_ids"))).alias(
-                        "ner_mapped_ids"
+
+                # Map the cleaned labels with new OnToma instance (faster and safer for clean drug names)
+                ontoma_clean = OnToma(spark=spark, entity_lut_list=[drug_label_lut])
+                ner_mapped = ontoma_clean.map_entities(
+                    df=ner_extracted,
+                    result_col_name="mapped_ids",
+                    entity_col_name="clean_label",
+                    entity_kind="label",
+                    type_col=f.lit("CD"),
+                )
+
+                # Aggregate: original label → list of mapped IDs
+                ner_aggregated = (
+                    ner_mapped.filter(
+                        f.col("mapped_ids").isNotNull() & (f.size("mapped_ids") > 0)
+                    )
+                    .groupBy("query_label")
+                    .agg(
+                        f.array_distinct(f.flatten(f.collect_list("mapped_ids"))).alias(
+                            "ner_mapped_ids"
+                        )
                     )
                 )
-            )
 
             # Merge: prefer dictionary, fallback to NER
             mapping_results = (
@@ -292,16 +421,6 @@ def map_entities(
 
     # Convert to Polars and join back
     polars_mapping_results = _process_mapping_results(mapping_results)
-
-    # Some upstream datasets may not yet have ID columns (e.g. `diseaseId`/`drugId`).
-    # Ensure they exist before we attempt to coalesce them with newly mapped IDs.
-    missing_id_cols: list[pl.Expr] = []
-    if disease_id_column_name not in df.columns:
-        missing_id_cols.append(pl.lit(None).cast(pl.String).alias(disease_id_column_name))
-    if drug_id_column_name not in df.columns:
-        missing_id_cols.append(pl.lit(None).cast(pl.String).alias(drug_id_column_name))
-    if missing_id_cols:
-        df = df.with_columns(*missing_id_cols)
 
     return (
         df.join(
