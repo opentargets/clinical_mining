@@ -95,12 +95,13 @@ PHASE_TO_CATEGORY_MAP = {
 APPROVAL_SOURCES = {"ATC", "EMA", "FDA", "DailyMed", "PMDA"}
 
 
-def map_phase_to_category(phase: str | None, source: str) -> ClinicalStageCategory:
+def map_phase_to_category(phase: str | None, source: str, overall_status: str | None) -> ClinicalStageCategory:
     """Map original phase value to standardised category.
 
     Args:
         phase: Original phase value (can be null)
         source: Data source name
+        overall_status: Overall status of the trial. Relevant when it reports approvals for compassionate use cases.
 
     Returns:
         Standardised clinical status category
@@ -112,7 +113,9 @@ def map_phase_to_category(phase: str | None, source: str) -> ClinicalStageCatego
     ]
     if phase in withdrawn_values:
         return ClinicalStageCategory.WITHDRAWAL
-    if source in APPROVAL_SOURCES:
+    elif source in APPROVAL_SOURCES:
+        return ClinicalStageCategory.APPROVAL
+    elif overall_status == "APPROVED_FOR_MARKETING":
         return ClinicalStageCategory.APPROVAL
 
     # Handle case-insensitive mapping
@@ -129,11 +132,18 @@ class ClinicalReport:
         # Harmonise column names from snake to camel case
         df = df.rename({col: snake_to_camel(col) for col in df.columns})
 
+        # Create struct with optional trialOverallStatus column
+        struct_expr = pl.struct(["phaseFromSource", "source"])
+        if "trialOverallStatus" in df.columns:
+            struct_expr = pl.struct(["phaseFromSource", "source", "trialOverallStatus"])
+        
         df = df.with_columns(
             # Assign clinical stage
-            clinicalStage=pl.struct(["phaseFromSource", "source"]).map_elements(
+            clinicalStage=struct_expr.map_elements(
                 lambda row: map_phase_to_category(
-                    row["phaseFromSource"], row["source"]
+                    row["phaseFromSource"], 
+                    row["source"], 
+                    row.get("trialOverallStatus")  # Safe get for optional column
                 ),
                 return_dtype=pl.String,
             ),
