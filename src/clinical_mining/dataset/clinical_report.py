@@ -132,11 +132,18 @@ class ClinicalReport:
         # Harmonise column names from snake to camel case
         df = df.rename({col: snake_to_camel(col) for col in df.columns})
 
+        # Create struct with optional trialOverallStatus column
+        struct_expr = pl.struct(["phaseFromSource", "source"])
+        if "trialOverallStatus" in df.columns:
+            struct_expr = pl.struct(["phaseFromSource", "source", "trialOverallStatus"])
+        
         df = df.with_columns(
             # Assign clinical stage
-            clinicalStage=pl.struct(["phaseFromSource", "source", "trialOverallStatus"]).map_elements(
+            clinicalStage=struct_expr.map_elements(
                 lambda row: map_phase_to_category(
-                    row["phaseFromSource"], row["source"], row["trialOverallStatus"]
+                    row["phaseFromSource"], 
+                    row["source"], 
+                    row.get("trialOverallStatus")  # Safe get for optional column
                 ),
                 return_dtype=pl.String,
             ),
