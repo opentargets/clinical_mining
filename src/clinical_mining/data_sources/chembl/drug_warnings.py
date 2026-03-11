@@ -34,8 +34,16 @@ def extract_clinical_report(
             pl.col("warning_type").str.to_lowercase().alias("phaseFromSource"),
             pl.lit(ClinicalReportType.CURATED_RESOURCE).alias("type"),
             pl.struct(
-                pl.col("efo_id").str.replace(":", "_").alias("diseaseId"),
-                pl.col("efo_term").alias("diseaseFromSource"),
+                pl.coalesce(
+                    pl.col("efo_id"),
+                    pl.col("efo_id_for_warning_class"),
+                )
+                .str.replace(":", "_")
+                .alias("diseaseId"),
+                pl.coalesce(
+                    pl.col("efo_term"),
+                    pl.col("warning_class"),
+                ).alias("diseaseFromSource"),
             ).alias("sideEffect"),
             pl.struct(
                 pl.col("pref_name").alias("drugFromSource"),
