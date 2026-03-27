@@ -156,4 +156,4 @@ Five checks printed as formatted tables after extraction completes:
 
 - `httpx` — async HTTP client for OpenRouter calls (new)
 - `polars`, `pydantic` — already in project
-- No GCS dependencies; data transferred manually via `gsutil`
+- No GCS dependencies; data transferred manually via `gcloud storage`
