@@ -1,0 +1,118 @@
+# @package _global_
+# =================================================
+# RECIPE: AACT LLM Extraction
+# =================================================
+# Loads clinical trial data from AACT and uses an LLM (via OpenAI) to
+# extract structured drug-disease evidence including drug intent, primary
+# indications, investigated drugs, comparators, and supportive medications.
+#
+# Usage:
+#   uv run clinical_mining +recipe=aact_llm_extractor
+#   uv run clinical_mining +recipe=aact_llm_extractor \
+#       workflow.transform.generate.filtered_report.parameters.id_value=NCT00002742 \
+#       workflow.transform.generate.output_llm_extraction.parameters.inspect_mode=true
+# =================================================
+
+# Input Data Sources
+inputs:
+  studies:
+    format: db_table
+    db: aact
+    select_cols:
+      - nct_id
+      - study_type
+      - phase
+      - official_title
+  interventions:
+    format: db_table
+    db: aact
+    select_cols:
+      - nct_id
+      - intervention_type
+      - name
+  conditions:
+    format: db_table
+    db: aact
+    select_cols:
+      - nct_id
+      - downcase_name
+  brief_summaries:
+    format: db_table
+    db: aact
+    select_cols:
+      - nct_id
+      - description
+  detailed_descriptions:
+    format: db_table
+    db: aact
+    select_cols:
+      - nct_id
+      - description
+  study_references:
+    format: db_table
+    db: aact
+    select_cols:
+      - nct_id
+      - pmid
+      - reference_type
+
+# Workflow Definition
+workflow:
+  transform:
+    setup:
+      clinical_report:
+        function: clinical_mining.data_sources.aact.extract_clinical_report
+        parameters:
+          studies: $studies
+          interventions: $interventions
+          conditions: $conditions
+          additional_metadata: [$brief_summaries, $study_references]
+          aggregation_specs:
+            pmid:
+              group_by: nct_id
+              alias: literature
+          detailed_descriptions: $detailed_descriptions
+
+    generate:
+      filtered_report:
+        function: clinical_mining.data_sources.aact.llm_extractor.filter_by_id
+        parameters:
+          report: $clinical_report
+          id_value: null
+
+      sampled_report:
+        function: clinical_mining.data_sources.aact.llm_extractor.sample_report
+        parameters:
+          report: $filtered_report
+          sample_size: 100
+          seed: 42
+
+      publications_map:
+        function: clinical_mining.data_sources.aact.llm_extractor.fetch_publications
+        parameters:
+          report: $sampled_report
+          max_publications: 1
+          enabled: true
+
+      prompts:
+        function: clinical_mining.data_sources.aact.llm_extractor.build_prompts
+        parameters:
+          report: $sampled_report
+          trial_fields:
+            trialOfficialTitle: Official Title
+            trialDescription: Description
+            trialDetailedDescription: Detailed Description
+          publications_map: $publications_map
+
+      output_llm_extraction:
+        function: clinical_mining.workflows.llm.run_extraction
+        parameters:
+          prompts: $prompts
+          model_class: clinical_mining.schemas.ClinicalReportExtraction
+          system_prompt_path: src/clinical_mining/prompts/aact_llm.txt
+          model: gpt-4.1-mini
+          openai_key: ${oc.env:OPENAI_API_KEY,""}
+          service_tier: flex
+          concurrency: 50
+          max_retries: 2
+          errors_dir: $output_dir

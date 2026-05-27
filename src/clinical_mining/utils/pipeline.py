@@ -4,17 +4,12 @@ import importlib
 
 from typing import Any, Callable
 
-from omegaconf import ListConfig
+from omegaconf import DictConfig, ListConfig
 import polars as pl
 
 
 def _params_reference_key(params: dict[str, Any], key: str) -> bool:
-    """Return True if a step's parameters reference a given data_store key.
-
-    This inspects values like `$spark_session` and also lists containing such
-    references. It is used to detect whether a step requires that dependency to
-    exist in `data_store` before parameters are resolved.
-    """
+    """Return True if a step's parameters reference a given data_store key."""
     for _name, value in params.items():
         if isinstance(value, str) and value == f"${key}":
             return True
@@ -26,14 +21,7 @@ def _params_reference_key(params: dict[str, Any], key: str) -> bool:
 
 
 def _ensure_spark_session(data_store: dict[str, Any]) -> None:
-    """Ensure `data_store['spark_session']` is initialized.
-
-    Spark is created lazily, only when a pipeline step explicitly references
-    `$spark_session`.
-
-    This function is idempotent: if the session already exists in `data_store`,
-    it will be reused and no new Spark session will be created.
-    """
+    """Ensure data_store['spark_session'] is initialized lazily."""
     if data_store.get("spark_session") is not None:
         return
 
@@ -43,28 +31,13 @@ def _ensure_spark_session(data_store: dict[str, Any]) -> None:
 
 
 def _get_callable(function_path: str) -> Callable[..., Any]:
-    """Imports a function or static method from a string path.
-
-    Supports both module-level functions and static/class methods within classes.
-    Examples:
-        - Module function: 'clinical_mining.data_sources.aact.aact.extract_clinical_report'
-        - Static method: 'clinical_mining.dataset.clinical_indication.ClinicalIndication.assign_approval_status'
-
-    Args:
-        function_path (str): The path to the function to import.
-    Returns:
-        function: The imported function.
-    Raises:
-        ImportError: If the function or static method cannot be imported.
-    """
+    """Imports a function or static method from a string path."""
     try:
-        # Try to import as a module-level function first
         try:
             module_path, function_name = function_path.rsplit(".", 1)
             module = importlib.import_module(module_path)
             return getattr(module, function_name)
         except (ImportError, AttributeError):
-            # If that fails, try to import as a class method
             parts = function_path.rsplit(".", 2)
             if len(parts) == 3:
                 module_path, class_name, method_name = parts
@@ -77,14 +50,7 @@ def _get_callable(function_path: str) -> Callable[..., Any]:
 
 
 def _resolve_params(params: dict[str, Any], data_store: dict[str, Any]) -> dict[str, Any]:
-    """Resolves parameter values from the data_store.
-
-    Args:
-        params (dict): The parameters to resolve.
-        data_store (dict): The data store to resolve the parameters from.
-    Returns:
-        dict: The resolved parameters.
-    """
+    """Resolves parameter values from the data_store."""
     resolved_params = {}
     for name, value in params.items():
         if isinstance(value, str) and value.startswith("$"):
@@ -98,18 +64,33 @@ def _resolve_params(params: dict[str, Any], data_store: dict[str, Any]) -> dict[
             resolved_params[name] = value
     return resolved_params
 
+
+def normalise_steps(section: dict | list) -> list[tuple[str, dict]]:
+    """Normalize a section (dict or list) into a list of (name, step_dict) tuples.
+
+    Supports both formats:
+        # List format (legacy)
+        - name: step_name
+          function: ...
+          parameters: ...
+
+        # Dict format (preferred)
+        step_name:
+          function: ...
+          parameters: ...
+    """
+    if isinstance(section, list):
+        return [(step["name"], step) for step in section]
+    elif isinstance(section, (dict, DictConfig)):
+        return [(name, {"name": name, **dict(step)}) for name, step in section.items()]
+    return []
+
+
 def execute_step(
     step: dict[str, Any],
     data_store: dict[str, Any],
 ) -> Any:
-    """Executes a single pipeline step and updates data_store to include the result.
-
-    Args:
-        step (dict[str, any]): The step to execute.
-        data_store (dict[str, any]): The data store with all dependencies
-    Returns:
-        any: The result of the step execution.
-    """
+    """Executes a single pipeline step and updates data_store."""
     func = _get_callable(step["function"])
     step_params = step.get("parameters", {})
     if _params_reference_key(step_params, "spark_session"):

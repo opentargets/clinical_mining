@@ -1,16 +1,25 @@
 # =================================================
-# PIPELINE CONFIGURATION
+# BASE CONFIGURATION
+# =================================================
+# This file contains shared infrastructure (database connections, path definitions)
+# that all recipes may use. It does not define any workflows on its own.
+#
+# Add a recipe to activate a workflow:
+#   uv run clinical_mining +recipe=clinical_report_generation
+#   uv run clinical_mining +recipe=aact_extractor
+#
+# See README.md for full documentation.
 # =================================================
 
 # Database Connection Properties
 db_properties:
   aact:
     type: postgresql
-    uri: localhost:5432/aact # aact-db.ctti-clinicaltrials.org:5432/aact
+    uri: localhost:5432/aact
     schema: ctgov
-    user: null
-    password: null
-  
+    user: ${oc.env:AACT_USER,""}
+    password: ${oc.env:AACT_PASSWORD,""}
+
   chembl:
     type: postgresql
     uri: localhost:5432/chembl_36
@@ -20,234 +29,12 @@ db_properties:
 
 # Path Definitions for Local Datasets
 datasets:
-  disease_index_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/inputs/disease # null
-  molecule_index_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/inputs/chembl_molecule # null
-  ttd_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/inputs/P1-05-Drug_disease.txt # null
-  ema_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/inputs/medicines-output-medicines-report_en.xlsx # null
-  pmda_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/inputs/pmda_approvals.pdf # null
-  output_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/outputs # ???
+  disease_index_path: data/inputs/disease
+  molecule_index_path: data/inputs/chembl_molecule
+  ttd_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/inputs/P1-05-Drug_disease.txt
+  ema_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/inputs/medicines-output-medicines-report_en.xlsx
+  pmda_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/inputs/pmda_approvals.pdf
+  output_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/outputs
 
-# Input Data Sources - Each key becomes the name of a DataFrame available to the pipeline steps.
-inputs:
-  chembl_curation:
-    format: parquet
-    path: /Users/irenelopez/EBI/repos/clinical_mining/data/outputs/chembl_indications/2101.parquet
-  molecule_index_spark:
-    format: parquet
-    path: ${datasets.molecule_index_path}
-  disease_index_spark:
-    format: parquet
-    path: ${datasets.disease_index_path}
-
-  studies:
-    format: db_table
-    db: aact
-    select_cols:
-      - nct_id
-      - overall_status
-      - phase
-      - study_type
-      - start_date
-      - why_stopped
-      - number_of_arms
-      - official_title
-  interventions:
-    format: db_table
-    db: aact
-    select_cols:
-      - nct_id
-      - intervention_type
-      - name
-  conditions:
-    format: db_table
-    db: aact
-    select_cols:
-      - nct_id
-      - downcase_name
-  study_references:
-    format: db_table
-    db: aact
-    select_cols:
-      - nct_id
-      - pmid
-      - reference_type
-  designs:
-    format: db_table
-    db: aact
-    select_cols:
-      - nct_id
-      - primary_purpose
-  brief_summaries:
-    format: db_table
-    db: aact
-    select_cols:
-      - nct_id
-      - description
-  # countries:
-  #   format: db_table
-  #   select_cols:
-  #     - nct_id
-  #     - name
-  # baseline_measurements:
-  #   format: db_table
-  #   select_cols:
-  #     - nct_id
-  #     - category
-  #     - title
-  #     - param_value
-
-  drug_indication:
-    format: db_table
-    db: chembl
-    select_cols:
-      - drugind_id
-      - molregno
-      - max_phase_for_ind
-      - efo_id
-      - efo_term
-
-  indication_refs:
-    format: db_table
-    db: chembl
-    select_cols:
-      - drugind_id
-      - ref_type
-      - ref_id
-      - ref_url
-
-  molecule_dictionary:
-    format: db_table
-    db: chembl
-    select_cols:
-      - molregno
-      - chembl_id
-      - pref_name
-
-  drug_warning:
-    format: db_table
-    db: chembl
-    select_cols:
-      - warning_id
-      - molregno
-      - warning_type
-      - warning_year
-      - warning_country
-      - efo_id
-      - efo_term
-
-  warning_refs:
-    format: db_table
-    db: chembl
-    select_cols:
-      - warning_id
-      - ref_type
-      - ref_id
-      - ref_url
-  
-
-# =============================
-# PIPELINE DEFINITION
-# =============================
-
-pipeline:
-  # SETUP: Steps to prepare data needed by later stages (e.g., loading mapping tables).
-  setup:
-    # - name: chembl_curation
-    #   function: clinical_mining.data_sources.chembl.curation.extract_chembl_ct_curation
-    #   parameters:
-    #     db_host: ${db_properties.chembl.host}
-    #     db_port: ${db_properties.chembl.port}
-    #     db_service: ${db_properties.chembl.service}
-    #     db_user: ${db_properties.chembl.user}
-    #     db_password: ${db_properties.chembl.password}
-    #     oracle_client_path: ${db_properties.chembl.oracle_client_path}
-
-    - name: pmda_raw
-      function: clinical_mining.data_sources.pmda.parse_pmda_approvals
-      parameters:
-        pmda_path: ${datasets.pmda_path}
-
-  # GENERATE: Steps that generate the core drug/indication DataFrames.
-  generate:
-    - name: chembl_indication_report
-      function: clinical_mining.data_sources.chembl.indications.extract_clinical_report
-      parameters:
-        drug_indication: $drug_indication
-        molecule_dictionary: $molecule_dictionary
-        indication_refs: $indication_refs
-
-    - name: chembl_drug_warning_report
-      function: clinical_mining.data_sources.chembl.drug_warnings.extract_clinical_report
-      parameters:
-        drug_warning: $drug_warning
-        molecule_dictionary: $molecule_dictionary
-        warning_refs: $warning_refs
-
-    - name: aact_report
-      function: clinical_mining.data_sources.aact.extract_clinical_report
-      parameters:
-        studies: $studies
-        interventions: $interventions
-        conditions: $conditions
-        additional_metadata: ['$study_references', '$designs', '$brief_summaries']
-        aggregation_specs: 
-          pmid: 
-            group_by: nct_id
-            alias: literature
-
-    - name: ttd_report
-      # TODO: extract indications first
-      function: clinical_mining.data_sources.ttd.extract_clinical_report
-      parameters:
-        indications: $ttd_indication
-
-    - name: ema_report
-      function: clinical_mining.data_sources.ema.extract_clinical_report
-      parameters:
-        indications_path: ${datasets.ema_path}
-        spark: $spark_session
-
-    - name: pmda_report
-      function: clinical_mining.data_sources.pmda.extract_clinical_report
-      parameters:
-        df: $pmda_raw
-        spark: $spark_session
-
-  # POST-PROCESS: Final transformation steps that run sequentially on the unified `indications` DataFrame.
-  post_process:
-    - name: chembl_indication_report_filter
-      function: clinical_mining.utils.polars_helpers.filter_df
-      parameters:
-        df: $chembl_indication_report
-        expr: "source != 'ClinicalTrials'"
-
-    - name: chembl_withdrawn
-      function: clinical_mining.utils.polars_helpers.filter_df
-      parameters:
-        df: $chembl_drug_warning_report
-        expr: "phaseFromSource == 'withdrawn'"
-
-    - name: all_reports
-      function: clinical_mining.utils.polars_helpers.union_dfs
-      parameters:
-        dfs: [$aact_report, $ttd_report, $ema_report, $pmda_report, $chembl_indication_report_filter, $chembl_withdrawn]
-
-    - name: output_clinical_report
-      function: clinical_mining.dataset.ClinicalReport.map_entities
-      parameters:
-        spark: $spark_session
-        reports: $all_reports
-        disease_index: $disease_index_spark
-        drug_index: $molecule_index_spark
-        chembl_curation: $chembl_curation
-        drug_column_name: drugFromSource
-        disease_column_name: diseaseFromSource
-        ner_extract_drug: true
-        ner_batch_size: 256
-        ner_cache_path: ".cache/ner/2025-11-03.parquet"
-
-    - name: output_clinical_indication
-      function: clinical_mining.dataset.ClinicalIndication.from_report
-      parameters:
-        report: $output_clinical_report
-
+# Workflow (populated by recipes)
+workflow: null
