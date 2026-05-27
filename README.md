@@ -15,15 +15,16 @@ This project provides tools to fetch, process, and annotate clinical trial data 
 ### Key Features
 
 - **Direct Connection to AACT:** Uses a robust connector to securely access the AACT PostgreSQL database.
-- **Automated Table Loading:** Loads and filters relevant tables (studies, interventions, conditions, etc.) using PolarsS for scalable processing.
+- **Automated Table Loading:** Loads and filters relevant tables (studies, interventions, conditions, etc.) using Polars for scalable processing.
 - **Drug and Disease Mapping:** Integrates external drug and disease vocabularies to annotate interventions and indications in trials.
-- **Output:** Produces harmonized datasets suitable for downstream analytics, including drug–disease mappings.
+- **LLM Extraction:** Uses LLMs to extract structured drug–disease evidence from clinical trial records.
+- **Config-Driven Workflows:** All pipelines are defined via YAML recipes — no code changes needed to reconfigure.
 
 ## Data Sources
 
 1. **AACT Database**  
 
-    AACT database is a PostgreSQL database containing clinical trial data from the ClinicalTrials.gov database. We use Polars to connect to the database and return queried data in a DataFrame format.Credentials and connection parameters are provided via configuration.
+    AACT database is a PostgreSQL database containing clinical trial data from the ClinicalTrials.gov database. We use Polars to connect to the database and return queried data in a DataFrame format. Credentials and connection parameters are provided via configuration.
 
 2. **ChEMBL Drug Indication Data**
 
@@ -39,50 +40,84 @@ This project provides tools to fetch, process, and annotate clinical trial data 
 
 ## Usage
 
-### 1. Configure Your Environment
+### Configuration
 
-- **Database Credentials**: Open `src/clinical_mining/config.yaml` and fill in your AACT database credentials under the `db_properties` section.
-- **File Paths**: Ensure the paths under the `datasets` section point to the correct locations for your input data files.
+The project uses a **base config + recipes** pattern:
 
-### 2. Run the Pipeline
+- **`config.yaml`** — minimal shared infrastructure (database connections, path definitions)
+- **`recipe/`** — workflow-specific configurations that extend the base
 
-Execute the main script from the root directory of the project:
+Run `uv run clinical_mining --help` to see available recipes.
+
+### Workflows
+
+#### 1. Clinical Report Generation
+
+Loads all data sources (AACT, ChEMBL, TTD, EMA, PMDA), generates clinical reports, maps entities to ChEMBL/EFO IDs, and produces the final clinical indication dataset.
 
 ```bash
-uv run clinical_mining
+uv run clinical_mining +recipe=clinical_report_generation
 ```
 
-You can override configuration parameters from the command line if needed:
+#### 2. LLM Extraction
+
+Loads clinical trial data from AACT and uses an LLM (via OpenAI) to extract structured drug–disease evidence including drug intent, primary indications, investigated drugs, comparators, and supportive medications.
 
 ```bash
-uv run clinical_mining db_properties.user=<your_user> db_properties.password=<your_password>
+# Batch extraction with defaults
+uv run clinical_mining +recipe=aact_llm_extractor
+
+# Single-trial inspect mode (prints to stdout, no output written)
+uv run clinical_mining +recipe=aact_llm_extractor \
+  workflow.transform.generate.filtered_report.parameters.id_value=NCT00002742
+
+# Override any config value
+uv run clinical_mining +recipe=aact_llm_extractor \
+  workflow.transform.generate.output_llm_extraction.parameters.model=gpt-4o
+
+# Enable publications enrichment
+uv run clinical_mining +recipe=aact_llm_extractor \
+  workflow.transform.generate.publications_map.parameters.enabled=true
+```
+### Configuring a Workflow Step
+
+Each step within a workflow is defined as a dictionary keyed by name:
+
+```yaml
+workflow:
+  transform:
+    generate:
+      my_step:                        # step name (becomes data_store key)
+        function: clinical_mining...  # full Python path
+        parameters:
+          input: $previous_step       # reference another step's output
+          literal_value: 42           # literal values passed as-is
 ```
 
-## Pipeline Configuration
+To override step parameters from the command line, use the full path:
 
-This pipeline is designed to be **config-driven**, allowing you to rearrange the steps to produce different outputs without changing the core Python code. The entire workflow is defined in `src/clinical_mining/config.yaml`.
+```bash
+uv run clinical_mining +recipe=aact_llm_extractor \
+  workflow.transform.generate.filtered_report.parameters.id_value=NCT00002742
+```
 
-### Pipeline Structure (DAG)
+The path follows the structure: `workflow.transform.<section>.<step_name>.parameters.<param>`
 
-The pipeline is structured as a Directed Acyclic Graph (DAG) with three main stages, executed in order:
+### Output
 
-1.  **`setup`**: Steps used to prepare any data needed for later processes, such as loading mapping tables or performing initial filtering on large datasets.
-2.  **`union`**: Steps that generate the primary drug/indication DataFrames. The outputs of all steps in this section are combined into a single DataFrame.
-3.  **`process`**: Final transformation steps that run sequentially on the unified DataFrame.
+Any step whose name starts with `output_` is automatically persisted:
 
-The final, annotated dataset (named `final_df` in the config) is saved in Parquet format for further analysis.
+- **Polars DataFrame** → written as Parquet to `${datasets.output_path}/<date>/<name>.parquet`
+- **Dict** → written as JSON to `${datasets.output_path}/<date>/<name>.json`
+- **None** → skipped (used for inspect/debug modes)
 
-### Configuring a Pipeline Step
+### Environment Variables
 
-Each step within a stage is a dictionary with the following keys:
-
--   `name`: A unique name for the step. The output of this step will be stored and can be referenced by this name in later steps.
--   `function`: The full Python path to the function you want to execute.
--   `parameters`: A dictionary of arguments to pass to the function.
-    -   **Reference other DataFrames**: To pass the output of a previous step or an initial input source as a parameter, use a `$` prefix.
-    -   **Literal values**: Any value without a `$` prefix is treated as a literal.
-
-The pipeline can be customised by editing the `pipeline` section of `config.yaml`. You can reorder steps, add new steps that call existing functions, or change parameters.
+| Variable | Required for |
+|---|---|
+| `AACT_USER` | AACT database access (optional for localhost) |
+| `AACT_PASSWORD` | AACT database access (optional for localhost) |
+| `OPENAI_API_KEY` | LLM extraction workflow |
 
 ### Contribute
 

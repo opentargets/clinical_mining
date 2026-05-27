@@ -6,13 +6,7 @@ from clinical_mining.schemas import ClinicalReportType
 
 
 def process_interventions(interventions: pl.DataFrame) -> pl.DataFrame:
-    """Extract relevant MeSH terms for interventional studies.
-
-    Args:
-        interventions (pl.DataFrame): The interventions or exposures (including drugs, medical devices, procedures, vaccines, and other products) of interest to the study, or associated with study arms/groups.
-    Returns:
-        pl.DataFrame: Interventions table with MeSH terms indexed on nct_id.
-    """
+    """Extract relevant MeSH terms for interventional studies."""
     INTERVENTION_WHITELIST = ["DRUG", "COMBINATION_PRODUCT", "BIOLOGICAL"]
     return (
         interventions.with_columns(drugFromSource=pl.col("name").str.to_lowercase())
@@ -23,17 +17,8 @@ def process_interventions(interventions: pl.DataFrame) -> pl.DataFrame:
     )
 
 
-def process_conditions(
-    conditions: pl.DataFrame,
-) -> pl.DataFrame:
-    """Extract relevant MeSH terms for conditions.
-
-    Args:
-        conditions (pl.DataFrame): Conditions studied in the clinical trial.
-
-    Returns:
-        pl.DataFrame: Conditions table with MeSH terms indexed on nct_id.
-    """
+def process_conditions(conditions: pl.DataFrame) -> pl.DataFrame:
+    """Extract relevant MeSH terms for conditions."""
     return (
         conditions.with_columns(
             diseaseFromSource=pl.col("downcase_name").str.to_lowercase()
@@ -44,44 +29,69 @@ def process_conditions(
     )
 
 
+def replace_with_llm_indications(
+    studies: pl.DataFrame,
+    llm_extraction_df: pl.DataFrame,
+) -> pl.DataFrame:
+    """Replace diseaseFromSource/drugFromSource with LLM-extracted indications for covered trials.
+
+    Trials not present in llm_extraction_df maintain the annotation present in ClinicalTrials.gov.
+    """
+    llm_extracted = (
+        llm_extraction_df.rename(
+            {"id": "nct_id", "diseases": "diseaseFromSource", "drugs": "drugFromSource"}
+        )
+        .explode("diseaseFromSource")
+        .explode("drugFromSource")
+    )
+
+    return pl.concat(
+        [
+            # Trials not covered by LLM extraction keep their original annotations
+            studies.join(llm_extracted.select("nct_id"), on="nct_id", how="anti"),
+            # Trials covered by LLM extraction get LLM annotations
+            studies.drop(["diseaseFromSource", "drugFromSource"])
+            .unique()  # to avoid ID duplication due to exploded diseases/drugs
+            .join(llm_extracted, on="nct_id", how="inner")
+            .select(studies.columns),  # to keep the same column order
+        ]
+    )
+
+
 def extract_clinical_report(
     studies: pl.DataFrame,
     interventions: pl.DataFrame,
     conditions: pl.DataFrame,
     additional_metadata: list[pl.DataFrame] | None = None,
     aggregation_specs: dict[str, dict[str, str]] | None = None,
+    detailed_descriptions: pl.DataFrame | None = None,
+    llm_extraction_df: pl.DataFrame | None = None,
 ) -> ClinicalReport:
-    """Return clinical trials with desired extra annotations from other tables.
-
-    Args:
-        studies (pl.DataFrame): The studies to process
-        interventions (pl.DataFrame): The interventions to process
-        conditions (pl.DataFrame): The conditions to process
-        additional_metadata (list[pl.DataFrame] | None): Optional list of DataFrames to join on and add additional metadata.
-        aggregation_specs (dict[str, dict[str, str]] | None): Optional dictionary of aggregation specifications for the additional metadata DataFrames.
-
-    Returns:
-        ClinicalReport: The processed studies.
-    """
+    """Return clinical trials with desired extra annotations from other tables."""
     STUDY_TYPES = ["INTERVENTIONAL", "OBSERVATIONAL", "EXPANDED_ACCESS"]
     interventions = process_interventions(interventions)
     conditions = process_conditions(conditions)
     studies = studies.join(interventions, on="nct_id", how="left").join(
         conditions, on="nct_id", how="left"
     )
+    if llm_extraction_df:
+        studies = replace_with_llm_indications(studies, llm_extraction_df)
+    if detailed_descriptions is not None:
+        studies = studies.join(
+            detailed_descriptions.rename({"description": "detailed_description"}),
+            on="nct_id",
+            how="left",
+        )
     if additional_metadata is not None:
         for metadata_df in additional_metadata:
-            # Check if any of the metadata needs aggregating before joining
             if aggregation_specs:
                 for key, spec in aggregation_specs.items():
                     if key in metadata_df.columns:
                         metadata_df = metadata_df.group_by(spec["group_by"]).agg(
                             pl.col(key).alias(spec["alias"])
                         )
-
             studies = studies.join(metadata_df, on="nct_id", how="left")
 
-    # Add `trial_` prefix to all trial metadata columns
     trial_metadata_cols = [
         c
         for c in studies.columns
@@ -103,10 +113,7 @@ def extract_clinical_report(
         .with_columns(
             source=pl.lit("AACT"),
             url=pl.concat_str(
-                [
-                    pl.lit("https://clinicaltrials.gov/study/"),
-                    pl.col("id"),
-                ],
+                [pl.lit("https://clinicaltrials.gov/study/"), pl.col("id")],
                 separator="",
             ),
             hasExpertReview=pl.lit(False),

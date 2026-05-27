@@ -25,6 +25,7 @@ def _build_select_query(
     select_cols: list[str] | str = "*",
     limit: int | None = None,
     dialect: str = "generic",
+    where_clause: str | None = None,
 ) -> str:
     """Form select query to extract data from a table.
 
@@ -34,6 +35,7 @@ def _build_select_query(
         select_cols: List of columns or a raw 
         limit: Optional row limit.
         dialect: "generic" uses SQL LIMIT. "oracle" uses FETCH FIRST.
+        where_clause: Optional WHERE clause (without the WHERE keyword).
 
     Returns:
         SQL query string.
@@ -45,6 +47,9 @@ def _build_select_query(
 
     qualified = f"{db_schema}.{table_name}" if db_schema else table_name
     query = f"SELECT DISTINCT {fields} FROM {qualified}"
+
+    if where_clause:
+        query += f" WHERE {where_clause}"
 
     if limit is not None:
         if dialect.lower() == "oracle":
@@ -61,6 +66,7 @@ def load_db_table(
     db_schema: str,
     select_cols: list[str] | str = "*",
     limit: int | None = None,
+    where_clause: str | None = None,
 ) -> pl.DataFrame:
     """Connects to a db and returns the query results as a Polars DataFrame."""
     dialect = "oracle" if "ora" in db_url else "generic"
@@ -70,6 +76,7 @@ def load_db_table(
         select_cols=select_cols,
         limit=limit,
         dialect=dialect,
+        where_clause=where_clause,
     )
     return pl.read_database_uri(query=query, uri=db_url)
 
