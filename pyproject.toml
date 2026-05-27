@@ -1,6 +1,6 @@
 [project]
 name = "clinical-mining"
-version = "0.5.0"
+version = "0.6.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -13,12 +13,12 @@ dependencies = [
     "hydra-core>=1.3.2",
     "ipykernel>=6.29.5",
     "loguru>=0.7.3",
-    "ontoma>=2.3.0",
+    "ontoma[ner]>=2.4.1",
     "pandas>=2.3.3",
     "pdfplumber>=0.11.8",
     "polars>=1.34.0",
     "polars-hash>=0.5.5",
-    "pyarrow>=21.0.0",
+    "pyarrow>=22.0.0",
     "pydantic>=2.11.7",
     "sqlalchemy>=2.0.42",
     "openai>=2.37.0",
