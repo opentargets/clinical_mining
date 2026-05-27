@@ -1,0 +1,222 @@
+# @package _global_
+# =================================================
+# RECIPE: Full Pipeline
+# =================================================
+# Loads all data sources (AACT, ChEMBL, TTD, EMA, PMDA), generates clinical
+# reports, maps entities to ChEMBL/EFO IDs, and produces the final clinical
+# indication dataset.
+#
+# Usage:
+#   uv run clinical_mining +recipe=clinical_report_generation
+# =================================================
+
+# Input Data Sources
+inputs:
+  chembl_curation:
+    format: parquet
+    path: data/inputs/chembl_mapping.parquet
+  molecule_index_spark:
+    format: parquet
+    path: ${datasets.molecule_index_path}
+  disease_index_spark:
+    format: parquet
+    path: ${datasets.disease_index_path}
+
+  studies:
+    format: db_table
+    db: aact
+    select_cols:
+      - nct_id
+      - overall_status
+      - phase
+      - study_type
+      - start_date
+      - why_stopped
+      - number_of_arms
+      - official_title
+  interventions:
+    format: db_table
+    db: aact
+    select_cols:
+      - nct_id
+      - intervention_type
+      - name
+  conditions:
+    format: db_table
+    db: aact
+    select_cols:
+      - nct_id
+      - downcase_name
+  study_references:
+    format: db_table
+    db: aact
+    select_cols:
+      - nct_id
+      - pmid
+      - reference_type
+  designs:
+    format: db_table
+    db: aact
+    select_cols:
+      - nct_id
+      - primary_purpose
+  brief_summaries:
+    format: db_table
+    db: aact
+    select_cols:
+      - nct_id
+      - description
+  detailed_descriptions:
+    format: db_table
+    db: aact
+    select_cols:
+      - nct_id
+      - description
+
+  drug_indication:
+    format: db_table
+    db: chembl
+    select_cols:
+      - drugind_id
+      - molregno
+      - max_phase_for_ind
+      - efo_id
+      - efo_term
+
+  indication_refs:
+    format: db_table
+    db: chembl
+    select_cols:
+      - drugind_id
+      - ref_type
+      - ref_id
+      - ref_url
+
+  molecule_dictionary:
+    format: db_table
+    db: chembl
+    select_cols:
+      - molregno
+      - chembl_id
+      - pref_name
+
+  drug_warning:
+    format: db_table
+    db: chembl
+    select_cols:
+      - warning_id
+      - molregno
+      - warning_type
+      - warning_year
+      - warning_country
+      - efo_id
+      - efo_term
+
+  warning_refs:
+    format: db_table
+    db: chembl
+    select_cols:
+      - warning_id
+      - ref_type
+      - ref_id
+      - ref_url
+
+# Workflow Definition
+workflow:
+  transform:
+    # SETUP: Steps to prepare data needed by later stages
+    setup:
+      pmda_raw:
+        function: clinical_mining.data_sources.pmda.parse_pmda_approvals
+        parameters:
+          pmda_path: ${datasets.pmda_path}
+
+      aact_batch_extraction:
+        function: clinical_mining.data_sources.aact.llm_extractor.parse_indication_batch_results
+        parameters:
+          output_dir: data/inputs/batch_downloads
+
+    # GENERATE: Steps that generate the core drug/indication DataFrames
+    generate:
+      chembl_indication_report:
+        function: clinical_mining.data_sources.chembl.indications.extract_clinical_report
+        parameters:
+          drug_indication: $drug_indication
+          molecule_dictionary: $molecule_dictionary
+          indication_refs: $indication_refs
+
+      chembl_drug_warning_report:
+        function: clinical_mining.data_sources.chembl.drug_warnings.extract_clinical_report
+        parameters:
+          drug_warning: $drug_warning
+          molecule_dictionary: $molecule_dictionary
+          warning_refs: $warning_refs
+
+      aact_report:
+        function: clinical_mining.data_sources.aact.extract_clinical_report
+        parameters:
+          studies: $studies
+          interventions: $interventions
+          conditions: $conditions
+          additional_metadata: ['$study_references', '$designs', '$brief_summaries']
+          aggregation_specs:
+            pmid:
+              group_by: nct_id
+              alias: literature
+          detailed_descriptions: $detailed_descriptions
+          llm_extraction_df: $aact_batch_extraction
+
+      ttd_report:
+        function: clinical_mining.data_sources.ttd.extract_clinical_report
+        parameters:
+          indications: $ttd_indication
+
+      ema_report:
+        function: clinical_mining.data_sources.ema.extract_clinical_report
+        parameters:
+          indications_path: ${datasets.ema_path}
+          spark: $spark_session
+
+      pmda_report:
+        function: clinical_mining.data_sources.pmda.extract_clinical_report
+        parameters:
+          df: $pmda_raw
+          spark: $spark_session
+
+    # POST-PROCESS: Final transformation steps on the unified DataFrame
+    post_process:
+      chembl_indication_report_filter:
+        function: clinical_mining.utils.polars_helpers.filter_df
+        parameters:
+          df: $chembl_indication_report
+          expr: "source != 'ClinicalTrials'"
+
+      chembl_withdrawn:
+        function: clinical_mining.utils.polars_helpers.filter_df
+        parameters:
+          df: $chembl_drug_warning_report
+          expr: "phaseFromSource == 'withdrawn'"
+
+      all_reports:
+        function: clinical_mining.utils.polars_helpers.union_dfs
+        parameters:
+          dfs: [$aact_report, $ttd_report, $ema_report, $pmda_report, $chembl_indication_report_filter, $chembl_withdrawn]
+
+      output_clinical_report:
+        function: clinical_mining.dataset.ClinicalReport.map_entities
+        parameters:
+          spark: $spark_session
+          reports: $all_reports
+          disease_index: $disease_index_spark
+          drug_index: $molecule_index_spark
+          chembl_curation: $chembl_curation
+          drug_column_name: drugFromSource
+          disease_column_name: diseaseFromSource
+          ner_extract_drug: true
+          ner_batch_size: 256
+          ner_cache_path: ".cache/ner/ner_cache.parquet"
+
+      output_clinical_indication:
+        function: clinical_mining.dataset.ClinicalIndication.from_report
+        parameters:
+          report: $output_clinical_report
