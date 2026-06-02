@@ -48,11 +48,11 @@ def replace_with_llm_indications(
     return pl.concat(
         [
             # Trials not covered by LLM extraction keep their original annotations
-            studies.join(llm_extracted.select("nct_id"), on="nct_id", how="anti"),
+            studies.join(llm_extracted.select("nct_id"), left_on='nct_id', right_on=pl.col('nct_id').str.to_uppercase(), how="anti"),
             # Trials covered by LLM extraction get LLM annotations
             studies.drop(["diseaseFromSource", "drugFromSource"])
             .unique()  # to avoid ID duplication due to exploded diseases/drugs
-            .join(llm_extracted, on="nct_id", how="inner")
+            .join(llm_extracted, left_on='nct_id', right_on=pl.col('nct_id').str.to_uppercase(), how="inner")
             .select(studies.columns),  # to keep the same column order
         ]
     )

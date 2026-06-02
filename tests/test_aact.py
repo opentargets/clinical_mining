@@ -82,16 +82,16 @@ def test_replace_with_llm_indications():
     """Test that LLM indications replace source indications for LLM-covered trials."""
     from clinical_mining.data_sources.aact.clinical_report import replace_with_llm_indications
     studies = pl.DataFrame({
-        "nct_id": ["NCT1", "NCT1", "NCT2"],
-        "diseaseFromSource": ["colorectal cancer", "pain", "diabetes"],
-        "drugFromSource": ["acetaminophen", "acetaminophen", "metformin"],
-        "trial_phase": ["PHASE2", "PHASE2", "PHASE3"],
+        "nct_id": ["NCT1", "NCT1", "NCT2", "NCT3", "NCT4"],
+        "diseaseFromSource": ["colorectal cancer", "pain", "diabetes", "dementia", "heart failure"],
+        "drugFromSource": ["acetaminophen", "acetaminophen", "metformin", "carbamazepine", "lisinopril"],
+        "trial_phase": ["PHASE2", "PHASE2", "PHASE3", "PHASE1", "PHASE4"],
     })
 
     llm_extraction_df = pl.DataFrame({
-        "id": ["NCT1"],
-        "diseases": [["metastatic colorectal cancer"]],
-        "drugs": [["acetaminophen"]],
+        "id": ["NCT1", "NCT3", "nct4"],
+        "diseases": [["metastatic colorectal cancer"], None, ["congestive heart failure"]],
+        "drugs": [["acetaminophen"], ["carbamazepine"], ["lisinopril"]],
     })
 
     result = replace_with_llm_indications(studies, llm_extraction_df)
@@ -111,3 +111,14 @@ def test_replace_with_llm_indications():
     nct2 = result.filter(pl.col("nct_id") == "NCT2")
     assert nct2["diseaseFromSource"].to_list() == ["diabetes"]
     assert nct2["drugFromSource"].to_list() == ["metformin"]
+
+    # LLM-covered trial NCT3 should not have disease information
+    # the result of the extraction was None
+    nct3 = result.filter(pl.col("nct_id") == "NCT3")
+    assert nct3["drugFromSource"].to_list() == ["carbamazepine"]
+    assert nct3["diseaseFromSource"][0] is None
+
+    # LLM integration is case insensitive
+    nct4 = result.filter(pl.col("nct_id") == "NCT4")
+    assert nct4["diseaseFromSource"].to_list() == ["congestive heart failure"]
+    
