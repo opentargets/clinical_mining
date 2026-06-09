@@ -185,7 +185,7 @@ def _parse_single_record(outer: dict, path: str = "<test>", row_idx: int = 0) ->
     }, None
 
 
-def parse_indication_batch_results(output_dir: str) -> pl.DataFrame:
+def parse_batch_results(output_dir: str) -> pl.DataFrame:
     """Read LLM extraction output files and output a dataframe with the expected schema we pass to the LLM.
 
     Every column is present in every row; missing optional fields are null.

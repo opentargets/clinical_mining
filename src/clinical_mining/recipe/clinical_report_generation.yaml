@@ -132,7 +132,7 @@ workflow:
           pmda_path: ${datasets.pmda_path}
 
       aact_batch_extraction:
-        function: clinical_mining.data_sources.aact.llm_extractor.parse_indication_batch_results
+        function: clinical_mining.data_sources.aact.llm_extractor.parse_batch_results
         parameters:
           output_dir: data/inputs/batch_downloads
 
