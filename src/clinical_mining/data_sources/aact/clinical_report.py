@@ -33,9 +33,9 @@ def replace_with_llm_indications(
     studies: pl.DataFrame,
     llm_extraction_df: pl.DataFrame,
 ) -> pl.DataFrame:
-    """Replace diseaseFromSource/drugFromSource with LLM-extracted indications for covered trials.
+    """Replace diseaseFromSource/drugFromSource with LLM-extracted indications for trials with available results.
 
-    Trials not present in llm_extraction_df maintain the annotation present in ClinicalTrials.gov.
+    Trials not present in llm_extraction_df get null indications.
     """
     llm_extracted = (
         llm_extraction_df.rename(
@@ -47,12 +47,15 @@ def replace_with_llm_indications(
 
     return pl.concat(
         [
-            # Trials not covered by LLM extraction keep their original annotations
+            # Trials not covered by LLM extraction get null indications
             studies.join(
                 llm_extracted.select("nct_id"),
                 left_on=pl.col("nct_id").str.to_uppercase(),
                 right_on=pl.col("nct_id").str.to_uppercase(),
                 how="anti",
+            ).with_columns(
+                pl.lit(None, dtype=pl.String).alias("drugFromSource"),
+                pl.lit(None, dtype=pl.String).alias("diseaseFromSource"),
             ),
             # Trials covered by LLM extraction get LLM annotations
             studies.drop(["diseaseFromSource", "drugFromSource"])
