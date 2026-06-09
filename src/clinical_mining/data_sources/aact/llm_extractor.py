@@ -79,31 +79,93 @@ def fetch_publications(
     pubs = build_publications_map(records, max_pubs=max_publications)
     return pubs
 
+_DISEASE_STRUCT = pl.Struct(
+    {
+        "name": pl.String,
+        "severity": pl.String,
+        "stage": pl.String,
+        "onset": pl.String,
+        "etiology": pl.String,
+        "evidence_quote": pl.String,
+    }
+)
+
+_DRUG_STRUCT = pl.Struct(
+    {
+        "drug": pl.String,
+        "route": pl.String,
+        "formulation": pl.String,
+        "synonyms": pl.List(pl.String),
+        "dosages": pl.List(pl.String),
+        "evidence_quote": pl.String,
+    }
+)
+
+EXTRACTION_SCHEMA = {
+    "id": pl.String,
+    "drug_intent": pl.String,
+    "drug_intent_confidence": pl.Float64,
+    "primary_indications": pl.List(_DISEASE_STRUCT),
+    "background_conditions": pl.List(_DISEASE_STRUCT),
+    "investigated_drugs": pl.List(_DRUG_STRUCT),
+    "comparator_drugs": pl.List(_DRUG_STRUCT),
+    "supportive_drugs": pl.List(_DRUG_STRUCT),
+    "conclusion": pl.String,
+}
+
 def parse_indication_batch_results(output_dir: str) -> pl.DataFrame:
-    """Reads LLM extraction output files and returns extracted trial disease/drug data.
-    
-    The function reads each json file and parses the JSON line by line, extracting
-    the trial ID, disease, and drug information.
+    """Read LLM extraction output files and output a dataframe with the expected schema we pass to the LLM.
 
-    The JSON might be malformed, so we log the errors into a bad records dataframe and continue.
-
-    Columns:
-    - id: Trial ID
-    - diseases: List of unique `primary_indications`
-    - drugs: List of unique `investigated_drugs` and `supportive_drugs`
+    Every column is present in every row; missing optional fields are null.
     """
     import json
     import fsspec
 
-    # Recursive listing with fsspec to work with local dirs and GCS paths
+    def _normalise_disease(raw: dict) -> dict:
+        """Fill every ExtractedDisease field, defaulting missing ones to None."""
+        return {
+            "name": raw.get("name"),
+            "severity": raw.get("severity"),
+            "stage": raw.get("stage"),
+            "onset": raw.get("onset"),
+            "etiology": raw.get("etiology"),
+            "evidence_quote": raw.get("evidence_quote"),
+        }
+
+
+    def _normalise_drug(raw: dict) -> dict:
+        """Fill every ExtractedDrug field, defaulting missing ones to None."""
+        return {
+            "drug": raw.get("drug"),
+            "route": raw.get("route"),
+            "formulation": raw.get("formulation"),
+            "synonyms": raw.get("synonyms"),      # already list[str] | None
+            "dosages": raw.get("dosages"),         # already list[str] | None
+            "evidence_quote": raw.get("evidence_quote"),
+        }
+
+
+    def _normalise_disease_list(items: list | None) -> list[dict]:
+        if not items:
+            return []
+        return [_normalise_disease(x) for x in items if isinstance(x, dict)]
+
+
+    def _normalise_drug_list(items: list | None) -> list[dict]:
+        if not items:
+            return []
+        return [_normalise_drug(x) for x in items if isinstance(x, dict)]
+    
     fs, root = fsspec.core.url_to_fs(output_dir)
     all_paths = fs.find(root)
     output_files = sorted(p for p in all_paths if p.endswith("_output.jsonl"))
     if not output_files:
         raise ValueError(f"No *_output.jsonl files found under: {output_dir}")
-    good_records = []
-    bad_records = []
+
+    good_records: list[dict] = []
+    bad_records: list[dict] = []
     total_rows = 0
+
     for path in output_files:
         with fs.open(path, "rt", encoding="utf-8") as f:
             for row_idx, line in enumerate(f):
@@ -111,63 +173,54 @@ def parse_indication_batch_results(output_dir: str) -> pl.DataFrame:
                 if not line:
                     continue
                 total_rows += 1
+                
+                # Parse Batch metadata
                 try:
                     outer = json.loads(line)
                 except json.JSONDecodeError as e:
-                    bad_records.append({
-                        "file": path,
-                        "row_idx": row_idx,
-                        "id": None,
-                        "error": f"outer_json_error: {e}",
-                    })
+                    bad_records.append({"file": path, "row_idx": row_idx, "id": None,
+                                        "error": f"outer_json_error: {e}"})
                     continue
+                
+                # Parse Batch response
                 record_id = outer.get("custom_id")
                 try:
                     text = outer["response"]["body"]["output"][0]["content"][0]["text"]
                 except Exception as e:
-                    bad_records.append({
-                        "file": path,
-                        "row_idx": row_idx,
-                        "id": record_id,
-                        "error": f"missing_text_path: {e}",
-                    })
+                    bad_records.append({"file": path, "row_idx": row_idx, "id": record_id,
+                                        "error": f"missing_text_path: {e}"})
                     continue
+
                 try:
                     payload = json.loads(text)
                 except json.JSONDecodeError as e:
-                    bad_records.append({
-                        "file": path,
-                        "row_idx": row_idx,
-                        "id": record_id,
-                        "error": f"inner_json_error: {e}",
-                    })
+                    bad_records.append({"file": path, "row_idx": row_idx, "id": record_id,
+                                        "error": f"inner_json_error: {e}"})
                     continue
-                diseases = [
-                    x.get("name")
-                    for x in (payload.get("primary_indications") or [])
-                    if isinstance(x, dict) and x.get("name")
-                ]
-                investigated = [
-                    x.get("drug")
-                    for x in (payload.get("investigated_drugs") or [])
-                    if isinstance(x, dict) and x.get("drug")
-                ]
-                supportive = [
-                    x.get("drug")
-                    for x in (payload.get("supportive_drugs") or [])
-                    if isinstance(x, dict) and x.get("drug")
-                ]
-                seen = set()
-                drugs = []
-                for d in investigated + supportive:
-                    if d not in seen:
-                        seen.add(d)
-                        drugs.append(d)
-                good_records.append({
-                    "id": record_id,
-                    "diseases": diseases,
-                    "drugs": drugs,
-                })
+
+                good_records.append(
+                    {
+                        "id": record_id,
+                        "drug_intent": payload.get("drug_intent"),
+                        "drug_intent_confidence": payload.get("drug_intent_confidence"),
+                        "primary_indications": _normalise_disease_list(
+                            payload.get("primary_indications")
+                        ),
+                        "background_conditions": _normalise_disease_list(
+                            payload.get("background_conditions")
+                        ),
+                        "investigated_drugs": _normalise_drug_list(
+                            payload.get("investigated_drugs")
+                        ),
+                        "comparator_drugs": _normalise_drug_list(
+                            payload.get("comparator_drugs")
+                        ),
+                        "supportive_drugs": _normalise_drug_list(
+                            payload.get("supportive_drugs")
+                        ),
+                        "conclusion": payload.get("conclusion"),
+                    }
+                )
 
     if bad_records:
         logger.warning(
@@ -175,7 +228,7 @@ def parse_indication_batch_results(output_dir: str) -> pl.DataFrame:
             len(bad_records),
             output_dir,
         )
-        logger.warning("Sample malformed rows (up to 10): {}", bad_records[:10])
+        logger.warning("Sample malformed rows: {}", bad_records[:5])
 
     logger.info(
         "Parsed {} rows from {} output files (good={}, bad={})",
@@ -185,4 +238,7 @@ def parse_indication_batch_results(output_dir: str) -> pl.DataFrame:
         len(bad_records),
     )
 
-    return pl.DataFrame(good_records)
+    if not good_records:
+        return pl.DataFrame(schema=EXTRACTION_SCHEMA)
+
+    return pl.DataFrame(good_records, schema=EXTRACTION_SCHEMA)
