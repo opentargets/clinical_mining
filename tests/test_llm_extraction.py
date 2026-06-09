@@ -1,9 +1,16 @@
+import json
+
 import pytest
 from pydantic import ValidationError
+
 from clinical_mining.schemas import (
     ClinicalReportExtraction,
     ExtractedDrug,
     ExtractedDisease,
+)
+from clinical_mining.data_sources.aact.llm_extractor import (
+    _parse_single_record,
+    EXTRACTION_SCHEMA,
 )
 
 
@@ -61,6 +68,7 @@ def test_extracted_drug_route_and_formulation_independent():
 def test_extracted_drug_modifiers_round_trip_json():
     """route/formulation survive JSON round-trip."""
     import json
+
     drug = ExtractedDrug(
         drug="metformin",
         route="oral",
@@ -76,7 +84,9 @@ def test_extracted_drug_modifiers_round_trip_json():
 
 
 def test_extracted_disease_required_fields():
-    disease = ExtractedDisease(name="type 2 diabetes", evidence_quote="patients with type 2 diabetes")
+    disease = ExtractedDisease(
+        name="type 2 diabetes", evidence_quote="patients with type 2 diabetes"
+    )
     assert disease.name == "type 2 diabetes"
     assert disease.evidence_quote == "patients with type 2 diabetes"
 
@@ -113,12 +123,16 @@ def test_clinical_report_extraction_full():
         id="NCT04012606",
         drug_intent="therapeutic",
         drug_intent_confidence=0.95,
-        primary_indications=[ExtractedDisease(
-            name="type 2 diabetes",
-            evidence_quote="patients with type 2 diabetes were enrolled",
-        )],
+        primary_indications=[
+            ExtractedDisease(
+                name="type 2 diabetes",
+                evidence_quote="patients with type 2 diabetes were enrolled",
+            )
+        ],
         investigated_drugs=[
-            ExtractedDrug(drug="metformin", evidence_quote="metformin 500 mg was administered"),
+            ExtractedDrug(
+                drug="metformin", evidence_quote="metformin 500 mg was administered"
+            ),
         ],
     )
     assert extraction.id == "NCT04012606"
@@ -134,12 +148,22 @@ def test_clinical_report_extraction_supports_multiple_primary_indications():
         drug_intent="therapeutic",
         drug_intent_confidence=0.95,
         primary_indications=[
-            ExtractedDisease(name="non-Hodgkin lymphoma", evidence_quote="Non-Hodgkin Lymphoma"),
-            ExtractedDisease(name="acute lymphoblastic leukemia", evidence_quote="Acute Lymphoblastic Leukemia"),
-            ExtractedDisease(name="chronic lymphocytic leukemia", evidence_quote="Chronic Lymphocytic Leukemia"),
+            ExtractedDisease(
+                name="non-Hodgkin lymphoma", evidence_quote="Non-Hodgkin Lymphoma"
+            ),
+            ExtractedDisease(
+                name="acute lymphoblastic leukemia",
+                evidence_quote="Acute Lymphoblastic Leukemia",
+            ),
+            ExtractedDisease(
+                name="chronic lymphocytic leukemia",
+                evidence_quote="Chronic Lymphocytic Leukemia",
+            ),
         ],
         investigated_drugs=[
-            ExtractedDrug(drug="TriCAR19.20.22 T cells", evidence_quote="TriCAR19.20.22 T cells"),
+            ExtractedDrug(
+                drug="TriCAR19.20.22 T cells", evidence_quote="TriCAR19.20.22 T cells"
+            ),
         ],
     )
     assert len(extraction.primary_indications) == 3
@@ -151,12 +175,16 @@ def test_clinical_report_extraction_diagnostic_drug_intent():
         id="NCT07218224",
         drug_intent="diagnostic",
         drug_intent_confidence=0.9,
-        primary_indications=[ExtractedDisease(
-            name="parathyroid adenomas",
-            evidence_quote="localization of parathyroid adenomas",
-        )],
+        primary_indications=[
+            ExtractedDisease(
+                name="parathyroid adenomas",
+                evidence_quote="localization of parathyroid adenomas",
+            )
+        ],
         investigated_drugs=[
-            ExtractedDrug(drug="18F-fluorocholine", evidence_quote="18F-fluorocholine (FCH)"),
+            ExtractedDrug(
+                drug="18F-fluorocholine", evidence_quote="18F-fluorocholine (FCH)"
+            ),
         ],
     )
     assert extraction.drug_intent == "diagnostic"
@@ -169,14 +197,18 @@ def test_clinical_report_extraction_prevention_drug_intent():
         id="NCT00000620",
         drug_intent="prevention",
         drug_intent_confidence=0.85,
-        primary_indications=[ExtractedDisease(
-            name="cardiovascular events",
-            evidence_quote="prevent major cardiovascular events",
-        )],
-        background_conditions=[ExtractedDisease(
-            name="type 2 diabetes",
-            evidence_quote="adults with type 2 diabetes",
-        )],
+        primary_indications=[
+            ExtractedDisease(
+                name="cardiovascular events",
+                evidence_quote="prevent major cardiovascular events",
+            )
+        ],
+        background_conditions=[
+            ExtractedDisease(
+                name="type 2 diabetes",
+                evidence_quote="adults with type 2 diabetes",
+            )
+        ],
         investigated_drugs=[
             ExtractedDrug(drug="simvastatin", evidence_quote="simvastatin"),
         ],
@@ -190,7 +222,9 @@ def test_clinical_report_extraction_optional_fields_default_none():
         id="NCT00000001",
         drug_intent="therapeutic",
         drug_intent_confidence=0.95,
-        primary_indications=[ExtractedDisease(name="asthma", evidence_quote="asthma patients")],
+        primary_indications=[
+            ExtractedDisease(name="asthma", evidence_quote="asthma patients")
+        ],
         investigated_drugs=[
             ExtractedDrug(drug="budesonide", evidence_quote="budesonide inhaler"),
         ],
@@ -229,23 +263,25 @@ from pathlib import Path
 
 def _make_sample_parquet(path: str, n: int = 20) -> pl.DataFrame:
     """Helper: write a minimal clinical report parquet for testing."""
-    df = pl.DataFrame({
-        "id": [f"NCT{i:08d}" for i in range(n)],
-        "type": ["CLINICAL_TRIAL"] * (n - 2) + ["DRUG_LABEL", "REGULATORY_AGENCY"],
-        "clinicalStage": ["PHASE_2"] * n,
-        "drugs": [[{"drugFromSource": "aspirin", "drugId": None}]] * n,
-        "diseases": [[{"diseaseFromSource": "headache", "diseaseId": None}]] * n,
-        "trial_official_title": [f"Study {i}" for i in range(n)],
-        "trial_description": [f"Description {i}" for i in range(n)],
-        "trial_phase": ["PHASE2"] * n,
-        "trial_overall_status": ["COMPLETED"] * n,
-        "trial_primary_purpose": ["TREATMENT"] * n,
-        "trial_study_type": ["INTERVENTIONAL"] * n,
-        "trial_number_of_arms": [2] * n,
-        "trial_why_stopped": [None] * n,
-        "trial_literature": [None] * n,
-        "trial_start_date": [None] * n,
-    })
+    df = pl.DataFrame(
+        {
+            "id": [f"NCT{i:08d}" for i in range(n)],
+            "type": ["CLINICAL_TRIAL"] * (n - 2) + ["DRUG_LABEL", "REGULATORY_AGENCY"],
+            "clinicalStage": ["PHASE_2"] * n,
+            "drugs": [[{"drugFromSource": "aspirin", "drugId": None}]] * n,
+            "diseases": [[{"diseaseFromSource": "headache", "diseaseId": None}]] * n,
+            "trial_official_title": [f"Study {i}" for i in range(n)],
+            "trial_description": [f"Description {i}" for i in range(n)],
+            "trial_phase": ["PHASE2"] * n,
+            "trial_overall_status": ["COMPLETED"] * n,
+            "trial_primary_purpose": ["TREATMENT"] * n,
+            "trial_study_type": ["INTERVENTIONAL"] * n,
+            "trial_number_of_arms": [2] * n,
+            "trial_why_stopped": [None] * n,
+            "trial_literature": [None] * n,
+            "trial_start_date": [None] * n,
+        }
+    )
     df.write_parquet(path)
     return df
 
@@ -266,6 +302,7 @@ TRIAL_FIELDS = {
 
 def test_build_prompt_contains_id_and_trial_fields():
     from clinical_mining.data_sources.aact.llm_extractor import build_prompt
+
     row = {
         "id": "NCT04012606",
         "trialOfficialTitle": "A Phase 2 Study",
@@ -290,6 +327,7 @@ def test_build_prompt_contains_id_and_trial_fields():
 
 def test_build_prompt_handles_missing_trial_fields():
     from clinical_mining.data_sources.aact.llm_extractor import build_prompt
+
     row = {"id": "NCT00000001"}  # no trial_* fields
     prompt = build_prompt(row, trial_fields=TRIAL_FIELDS)
     assert "NCT00000001" in prompt
@@ -297,6 +335,7 @@ def test_build_prompt_handles_missing_trial_fields():
 
 def test_build_prompt_with_publications():
     from clinical_mining.data_sources.aact.llm_extractor import build_prompt
+
     row = {
         "id": "NCT04012606",
         "trialOfficialTitle": "A Phase 2 Study",
@@ -325,9 +364,13 @@ def test_build_prompt_with_publications():
 
 def test_build_prompt_includes_interventions():
     from clinical_mining.data_sources.aact.llm_extractor import build_prompt
+
     row = {
         "id": "NCT00000001",
-        "drugs": [{"drugFromSource": "aspirin", "drugId": None}, {"drugFromSource": "ibuprofen", "drugId": None}],
+        "drugs": [
+            {"drugFromSource": "aspirin", "drugId": None},
+            {"drugFromSource": "ibuprofen", "drugId": None},
+        ],
     }
     prompt = build_prompt(row, trial_fields=TRIAL_FIELDS)
     assert "Interventions" in prompt
@@ -337,6 +380,7 @@ def test_build_prompt_includes_interventions():
 
 def test_build_prompt_omits_interventions_when_empty():
     from clinical_mining.data_sources.aact.llm_extractor import build_prompt
+
     row = {"id": "NCT00000001", "drugs": []}
     assert "Interventions" not in build_prompt(row, trial_fields=TRIAL_FIELDS)
     row2 = {"id": "NCT00000001"}
@@ -345,9 +389,12 @@ def test_build_prompt_omits_interventions_when_empty():
 
 def test_build_prompt_without_publications_omits_section():
     from clinical_mining.data_sources.aact.llm_extractor import build_prompt
+
     row = {"id": "NCT00000001"}
     assert "Publications" not in build_prompt(row, trial_fields=TRIAL_FIELDS)
-    assert "Publications" not in build_prompt(row, trial_fields=TRIAL_FIELDS, publications=None)
+    assert "Publications" not in build_prompt(
+        row, trial_fields=TRIAL_FIELDS, publications=None
+    )
 
 
 def _make_extraction(
@@ -360,30 +407,38 @@ def _make_extraction(
         id=nct_id,
         drug_intent="therapeutic",
         drug_intent_confidence=0.95,
-        primary_indications=[ExtractedDisease(
-            name=condition,
-            evidence_quote=condition,
-        )],
+        primary_indications=[
+            ExtractedDisease(
+                name=condition,
+                evidence_quote=condition,
+            )
+        ],
         investigated_drugs=[
-            ExtractedDrug(drug=drug, evidence_quote=drug)
-            for _ in range(num_drugs)
+            ExtractedDrug(drug=drug, evidence_quote=drug) for _ in range(num_drugs)
         ],
     )
 
 
 def _make_input_df(rows: list[dict]) -> pl.DataFrame:
-    return pl.DataFrame({
-        "id": [r["id"] for r in rows],
-        "clinicalStage": [r.get("clinicalStage", "PHASE_2") for r in rows],
-        "drugs": [[{"drugFromSource": r["drug"], "drugId": None}] for r in rows],
-        "diseases": [[{"diseaseFromSource": r["disease"], "diseaseId": None}] for r in rows],
-    })
+    return pl.DataFrame(
+        {
+            "id": [r["id"] for r in rows],
+            "clinicalStage": [r.get("clinicalStage", "PHASE_2") for r in rows],
+            "drugs": [[{"drugFromSource": r["drug"], "drugId": None}] for r in rows],
+            "diseases": [
+                [{"diseaseFromSource": r["disease"], "diseaseId": None}] for r in rows
+            ],
+        }
+    )
 
 
 def test_compute_drug_coverage_both_present():
     from scripts.validation_report import compute_drug_coverage
+
     extractions = [_make_extraction("NCT0001", "aspirin", "headache")]
-    input_df = _make_input_df([{"id": "NCT0001", "drug": "aspirin", "disease": "headache"}])
+    input_df = _make_input_df(
+        [{"id": "NCT0001", "drug": "aspirin", "disease": "headache"}]
+    )
     result = compute_drug_coverage(extractions, input_df)
     assert result["input"] == 1
     assert result["output"] == 1
@@ -394,6 +449,7 @@ def test_compute_drug_coverage_both_present():
 
 def test_compute_drug_coverage_missing_in_input():
     from scripts.validation_report import compute_drug_coverage
+
     extractions = [_make_extraction("NCT0001", "aspirin", "headache")]
     input_df = _make_input_df([{"id": "NCT0001", "drug": None, "disease": "headache"}])
     result = compute_drug_coverage(extractions, input_df)
@@ -403,8 +459,11 @@ def test_compute_drug_coverage_missing_in_input():
 
 def test_compute_disease_coverage_both_present():
     from scripts.validation_report import compute_disease_coverage
+
     extractions = [_make_extraction("NCT0001", "aspirin", "headache")]
-    input_df = _make_input_df([{"id": "NCT0001", "drug": "aspirin", "disease": "headache"}])
+    input_df = _make_input_df(
+        [{"id": "NCT0001", "drug": "aspirin", "disease": "headache"}]
+    )
     result = compute_disease_coverage(extractions, input_df)
     assert result["input"] == 1
     assert result["output"] == 1
@@ -413,6 +472,7 @@ def test_compute_disease_coverage_both_present():
 
 def test_compute_disease_coverage_missing_in_input():
     from scripts.validation_report import compute_disease_coverage
+
     extractions = [_make_extraction("NCT0001", "aspirin", "migraine")]
     input_df = _make_input_df([{"id": "NCT0001", "drug": "aspirin", "disease": None}])
     result = compute_disease_coverage(extractions, input_df)
@@ -422,14 +482,27 @@ def test_compute_disease_coverage_missing_in_input():
 
 def test_compute_drugs_by_stage():
     from scripts.validation_report import compute_drugs_by_stage
+
     extractions = [
         _make_extraction("NCT0001", "aspirin", "headache", num_drugs=2),
         _make_extraction("NCT0002", "metformin", "diabetes", num_drugs=1),
     ]
-    input_df = _make_input_df([
-        {"id": "NCT0001", "drug": "aspirin", "disease": "headache", "clinicalStage": "PHASE_2"},
-        {"id": "NCT0002", "drug": "metformin", "disease": "diabetes", "clinicalStage": "PHASE_3"},
-    ])
+    input_df = _make_input_df(
+        [
+            {
+                "id": "NCT0001",
+                "drug": "aspirin",
+                "disease": "headache",
+                "clinicalStage": "PHASE_2",
+            },
+            {
+                "id": "NCT0002",
+                "drug": "metformin",
+                "disease": "diabetes",
+                "clinicalStage": "PHASE_3",
+            },
+        ]
+    )
     result = compute_drugs_by_stage(extractions, input_df)
     assert isinstance(result, pl.DataFrame)
     assert "clinicalStage" in result.columns
@@ -440,6 +513,7 @@ def test_compute_drugs_by_stage():
 
 def test_compute_excipient_hits_detects_placebo():
     from scripts.validation_report import compute_excipient_hits
+
     extractions = [
         _make_extraction("NCT0001", "placebo", "headache"),
         _make_extraction("NCT0002", "aspirin", "headache"),
@@ -455,26 +529,37 @@ def test_compute_excipient_hits_detects_placebo():
 def test_compute_quote_grounding_skips_none_quotes():
     """background_conditions with evidence_quote=None should not count or crash."""
     from scripts.validation_report import compute_quote_grounding
+
     ext = ClinicalReportExtraction(
         id="NCT0001",
         drug_intent="therapeutic",
         drug_intent_confidence=0.95,
-        primary_indications=[ExtractedDisease(
-            name="peripheral neurotoxicity",
-            evidence_quote="peripheral neurotoxicity",
-        )],
-        background_conditions=[ExtractedDisease(name="colorectal cancer")],  # no evidence_quote
-        investigated_drugs=[ExtractedDrug(drug="neurotropin", evidence_quote="neurotropin")],
+        primary_indications=[
+            ExtractedDisease(
+                name="peripheral neurotoxicity",
+                evidence_quote="peripheral neurotoxicity",
+            )
+        ],
+        background_conditions=[
+            ExtractedDisease(name="colorectal cancer")
+        ],  # no evidence_quote
+        investigated_drugs=[
+            ExtractedDrug(drug="neurotropin", evidence_quote="neurotropin")
+        ],
     )
-    input_df = pl.DataFrame({
-        "id": ["NCT0001"],
-        "clinicalStage": ["PHASE_3"],
-        "drugs": [[{"drugFromSource": "neurotropin", "drugId": None}]],
-        "diseases": [[{"diseaseFromSource": "peripheral neurotoxicity", "diseaseId": None}]],
-        "trialOfficialTitle": ["peripheral neurotoxicity neurotropin"],
-        "trialDescription": [None],
-        "trialDetailedDescription": [None],
-    })
+    input_df = pl.DataFrame(
+        {
+            "id": ["NCT0001"],
+            "clinicalStage": ["PHASE_3"],
+            "drugs": [[{"drugFromSource": "neurotropin", "drugId": None}]],
+            "diseases": [
+                [{"diseaseFromSource": "peripheral neurotoxicity", "diseaseId": None}]
+            ],
+            "trialOfficialTitle": ["peripheral neurotoxicity neurotropin"],
+            "trialDescription": [None],
+            "trialDetailedDescription": [None],
+        }
+    )
     result = compute_quote_grounding([ext], input_df)
     # Only the 2 non-None quotes are counted; the None background_condition is skipped
     assert result["total_quotes"] == 2
@@ -483,14 +568,17 @@ def test_compute_quote_grounding_skips_none_quotes():
 
 def test_compute_quote_grounding_finds_present_quotes():
     from scripts.validation_report import compute_quote_grounding
+
     ext = ClinicalReportExtraction(
         id="NCT0001",
         drug_intent="therapeutic",
         drug_intent_confidence=0.95,
-        primary_indications=[ExtractedDisease(
-            name="headache",
-            evidence_quote="patients with chronic headache were enrolled",
-        )],
+        primary_indications=[
+            ExtractedDisease(
+                name="headache",
+                evidence_quote="patients with chronic headache were enrolled",
+            )
+        ],
         investigated_drugs=[
             ExtractedDrug(
                 drug="aspirin",
@@ -498,15 +586,19 @@ def test_compute_quote_grounding_finds_present_quotes():
             )
         ],
     )
-    input_df = pl.DataFrame({
-        "id": ["NCT0001"],
-        "clinicalStage": ["PHASE_2"],
-        "drugs": [[{"drugFromSource": "aspirin", "drugId": None}]],
-        "diseases": [[{"diseaseFromSource": "headache", "diseaseId": None}]],
-        "trialOfficialTitle": ["patients with chronic headache were enrolled; aspirin 100mg daily was administered"],
-        "trialDescription": [None],
-        "trialDetailedDescription": [None],
-    })
+    input_df = pl.DataFrame(
+        {
+            "id": ["NCT0001"],
+            "clinicalStage": ["PHASE_2"],
+            "drugs": [[{"drugFromSource": "aspirin", "drugId": None}]],
+            "diseases": [[{"diseaseFromSource": "headache", "diseaseId": None}]],
+            "trialOfficialTitle": [
+                "patients with chronic headache were enrolled; aspirin 100mg daily was administered"
+            ],
+            "trialDescription": [None],
+            "trialDetailedDescription": [None],
+        }
+    )
     result = compute_quote_grounding([ext], input_df)
     assert result["total_quotes"] == 2
     assert result["grounded"] == 2
@@ -515,25 +607,34 @@ def test_compute_quote_grounding_finds_present_quotes():
 
 def test_has_unmatched_drug_false_when_labels_overlap():
     from scripts.validation_report import build_comparison_df
+
     ext = _make_extraction("NCT0001", "Aspirin", "headache")
-    input_df = _make_input_df([{"id": "NCT0001", "drug": "aspirin", "disease": "headache"}])
+    input_df = _make_input_df(
+        [{"id": "NCT0001", "drug": "aspirin", "disease": "headache"}]
+    )
     df = build_comparison_df([ext], input_df)
     assert df["has_unmatched_drug"][0] is False
 
 
 def test_has_unmatched_drug_true_when_no_label_overlap():
     from scripts.validation_report import build_comparison_df
+
     ext = _make_extraction("NCT0001", "ibuprofen", "headache")
-    input_df = _make_input_df([{"id": "NCT0001", "drug": "aspirin", "disease": "headache"}])
+    input_df = _make_input_df(
+        [{"id": "NCT0001", "drug": "aspirin", "disease": "headache"}]
+    )
     df = build_comparison_df([ext], input_df)
     assert df["has_unmatched_drug"][0] is True
 
 
 def test_has_unmatched_drug_handles_partial_name_match():
     from scripts.validation_report import build_comparison_df
+
     # Input uses brand name "Entrectinib", LLM extracts INN "entrectinib" — substring match
     ext = _make_extraction("NCT0001", "entrectinib", "lung cancer")
-    input_df = _make_input_df([{"id": "NCT0001", "drug": "Entrectinib", "disease": "lung cancer"}])
+    input_df = _make_input_df(
+        [{"id": "NCT0001", "drug": "Entrectinib", "disease": "lung cancer"}]
+    )
     df = build_comparison_df([ext], input_df)
     assert df["has_unmatched_drug"][0] is False
 
@@ -541,6 +642,7 @@ def test_has_unmatched_drug_handles_partial_name_match():
 def test_build_comparison_df_surfaces_drug_modifier():
     """route/formulation should appear as a comma-joined output_drug_modifier column."""
     from scripts.validation_report import build_comparison_df
+
     ext = ClinicalReportExtraction(
         id="NCT0001",
         drug_intent="therapeutic",
@@ -555,7 +657,9 @@ def test_build_comparison_df_surfaces_drug_modifier():
             ),
         ],
     )
-    input_df = _make_input_df([{"id": "NCT0001", "drug": "metformin", "disease": "cancer"}])
+    input_df = _make_input_df(
+        [{"id": "NCT0001", "drug": "metformin", "disease": "cancer"}]
+    )
     df = build_comparison_df([ext], input_df)
     modifier = df["output_drug_modifier"][0]
     assert "oral" in modifier
@@ -565,24 +669,33 @@ def test_build_comparison_df_surfaces_drug_modifier():
 def test_build_comparison_df_drug_modifier_empty_when_plain():
     """A drug with no formulation/route/dosage_form yields an empty modifier column."""
     from scripts.validation_report import build_comparison_df
+
     ext = _make_extraction("NCT0001", "metformin", "diabetes")
-    input_df = _make_input_df([{"id": "NCT0001", "drug": "metformin", "disease": "diabetes"}])
+    input_df = _make_input_df(
+        [{"id": "NCT0001", "drug": "metformin", "disease": "diabetes"}]
+    )
     df = build_comparison_df([ext], input_df)
     assert df["output_drug_modifier"][0] == ""
 
 
 def test_has_unmatched_disease_false_when_labels_overlap():
     from scripts.validation_report import build_comparison_df
+
     ext = _make_extraction("NCT0001", "aspirin", "Non-small cell lung cancer")
-    input_df = _make_input_df([{"id": "NCT0001", "drug": "aspirin", "disease": "non-small cell lung cancer"}])
+    input_df = _make_input_df(
+        [{"id": "NCT0001", "drug": "aspirin", "disease": "non-small cell lung cancer"}]
+    )
     df = build_comparison_df([ext], input_df)
     assert df["has_unmatched_disease"][0] is False
 
 
 def test_has_unmatched_disease_true_when_no_label_overlap():
     from scripts.validation_report import build_comparison_df
+
     ext = _make_extraction("NCT0001", "aspirin", "migraine")
-    input_df = _make_input_df([{"id": "NCT0001", "drug": "aspirin", "disease": "headache"}])
+    input_df = _make_input_df(
+        [{"id": "NCT0001", "drug": "aspirin", "disease": "headache"}]
+    )
     df = build_comparison_df([ext], input_df)
     assert df["has_unmatched_disease"][0] is True
 
@@ -590,6 +703,7 @@ def test_has_unmatched_disease_true_when_no_label_overlap():
 def test_search_drug_disease_plausibility_returns_bool():
     from unittest.mock import MagicMock, patch
     from scripts.validation_report import search_drug_disease_plausibility
+
     with patch("scripts.validation_report.httpx") as mock_httpx:
         mock_response = MagicMock()
         mock_response.json.return_value = {
@@ -600,3 +714,75 @@ def test_search_drug_disease_plausibility_returns_bool():
         result = search_drug_disease_plausibility("aspirin", "headache")
         assert isinstance(result, bool)
         assert result is True
+
+class TestParseSingleRecord:
+    """Unit tests for _parse_single_record."""
+
+    SAMPLE_LINE = r"""{"id": "batch_req_6a1d6fccc80c8190b99bfd7b4e3af5fc", "custom_id": "nct00031889", "response": {"status_code": 200, "request_id": "039b5f8b-14a7-4df2-ac05-d1432b689a97", "body": {"id": "resp_0b866af5f6b78e2e016a1d6d1815b881978a79910735ecbf3c", "object": "response", "created_at": 1780313368, "status": "completed", "background": false, "error": null, "output": [{"id": "msg_0b866af5f6b78e2e016a1d6d18f5d48197b49a83dc713967b9", "type": "message", "status": "completed", "content": [{"type": "output_text", "annotations": [], "logprobs": [], "text": "{\"id\":\"nct00031889\",\"drug_intent\":\"therapeutic\",\"drug_intent_confidence\":0.95,\"primary_indications\":[{\"name\":\"prostate cancer\",\"severity\":null,\"stage\":\"stage IV\",\"onset\":null,\"etiology\":null,\"evidence_quote\":\"treating patients who have stage IV prostate cancer that has been previously treated with hormone therapy or surgery\"}],\"background_conditions\":[{\"name\":\"prostate cancer\",\"severity\":null,\"stage\":null,\"onset\":null,\"etiology\":null,\"evidence_quote\":\"failure of androgen suppression (luteinizing hormone-releasing hormone agonist or orchiectomy) in patients with stage IV prostate cancer\"}],\"investigated_drugs\":[{\"drug\":\"exemestane\",\"route\":\"oral\",\"formulation\":\"tablet\",\"synonyms\":null,\"dosages\":[\"once daily\"],\"evidence_quote\":\"Patients receive oral exemestane once daily.\"},{\"drug\":\"bicalutamide\",\"route\":\"oral\",\"formulation\":\"tablet\",\"synonyms\":null,\"dosages\":[\"once daily\"],\"evidence_quote\":\"Patients receive ... oral bicalutamide once daily.\"}],\"comparator_drugs\":null,\"supportive_drugs\":null,\"conclusion\":null}"}], "role": "assistant"}], "usage": {"input_tokens": 4710, "output_tokens": 258, "total_tokens": 4968}}}}"""
+
+    # ── happy path ────────────────────────────────────────────────────────────
+
+    def test_happy_path_top_level_fields(self):
+        good, bad = _parse_single_record(json.loads(self.SAMPLE_LINE))
+
+        assert bad is None
+        assert good["id"] == "nct00031889"
+        assert good["drug_intent"] == "therapeutic"
+        assert good["drug_intent_confidence"] == pytest.approx(0.95)
+
+    def test_primary_indications_parsed(self):
+        good, _ = _parse_single_record(json.loads(self.SAMPLE_LINE))
+
+        assert len(good["primary_indications"]) == 1
+        ind = good["primary_indications"][0]
+        assert ind["name"] == "prostate cancer"
+        assert ind["stage"] == "stage IV"
+        assert ind["severity"] is None
+        assert ind["etiology"] is None
+
+    def test_investigated_drugs_parsed(self):
+        good, _ = _parse_single_record(json.loads(self.SAMPLE_LINE))
+
+        drugs = good["investigated_drugs"]
+        assert len(drugs) == 2
+        names = {d["drug"] for d in drugs}
+        assert names == {"exemestane", "bicalutamide"}
+
+        exemestane = next(d for d in drugs if d["drug"] == "exemestane")
+        assert exemestane["route"] == "oral"
+        assert exemestane["formulation"] == "tablet"
+        assert exemestane["dosages"] == ["once daily"]
+        assert exemestane["synonyms"] is None
+
+    def test_optional_list_fields_are_empty_not_null(self):
+        """comparator_drugs and supportive_drugs are null in the payload —
+        normalised to [] so List(Struct) columns stay consistent."""
+        good, _ = _parse_single_record(json.loads(self.SAMPLE_LINE))
+
+        assert good["comparator_drugs"] == []
+        assert good["supportive_drugs"] == []
+
+    def test_record_builds_valid_dataframe(self):
+        good, _ = _parse_single_record(json.loads(self.SAMPLE_LINE))
+
+        df = pl.DataFrame([good], schema=EXTRACTION_SCHEMA)
+        assert df.shape == (1, len(EXTRACTION_SCHEMA))
+        assert df["drug_intent_confidence"].dtype == pl.Float64
+
+    # ── error paths ───────────────────────────────────────────────────────────
+
+    def test_missing_text_path_returns_bad_record(self):
+        broken = {"custom_id": "nct99999", "response": {"body": {}}}
+        good, bad = _parse_single_record(broken)
+
+        assert good is None
+        assert bad["id"] == "nct99999"
+        assert "missing_text_path" in bad["error"]
+
+    def test_malformed_inner_json_returns_bad_record(self):
+        outer = json.loads(self.SAMPLE_LINE)
+        outer["response"]["body"]["output"][0]["content"][0]["text"] = "{not valid json"
+        good, bad = _parse_single_record(outer)
+
+        assert good is None
+        assert "inner_json_error" in bad["error"]
