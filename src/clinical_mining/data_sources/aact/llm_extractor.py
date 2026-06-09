@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import fsspec
+import json
+
 import polars as pl
 from loguru import logger
 
@@ -113,48 +116,80 @@ EXTRACTION_SCHEMA = {
     "conclusion": pl.String,
 }
 
+
+def _normalise_disease(raw: dict) -> dict:
+    """Fill every ExtractedDisease field, defaulting missing ones to None."""
+    return {
+        "name": raw.get("name"),
+        "severity": raw.get("severity"),
+        "stage": raw.get("stage"),
+        "onset": raw.get("onset"),
+        "etiology": raw.get("etiology"),
+        "evidence_quote": raw.get("evidence_quote"),
+    }
+
+
+def _normalise_drug(raw: dict) -> dict:
+    """Fill every ExtractedDrug field, defaulting missing ones to None."""
+    return {
+        "drug": raw.get("drug"),
+        "route": raw.get("route"),
+        "formulation": raw.get("formulation"),
+        "synonyms": raw.get("synonyms"),      # already list[str] | None
+        "dosages": raw.get("dosages"),         # already list[str] | None
+        "evidence_quote": raw.get("evidence_quote"),
+    }
+
+
+def _normalise_disease_list(items: list | None) -> list[dict]:
+    if not items:
+        return []
+    return [_normalise_disease(x) for x in items if isinstance(x, dict)]
+
+
+def _normalise_drug_list(items: list | None) -> list[dict]:
+    if not items:
+        return []
+    return [_normalise_drug(x) for x in items if isinstance(x, dict)]
+
+def _parse_single_record(outer: dict, path: str = "<test>", row_idx: int = 0) -> tuple[dict | None, dict | None]:
+    """Parse a single decoded JSONL envelope into a good or bad record.
+    
+    Returns (good_record, None) on success, (None, bad_record) on failure.
+    Extracted so it can be unit-tested without filesystem setup.
+    """
+    record_id = outer.get("custom_id")
+
+    try:
+        text = outer["response"]["body"]["output"][0]["content"][0]["text"]
+    except Exception as e:
+        return None, {"file": path, "row_idx": row_idx, "id": record_id,
+                      "error": f"missing_text_path: {e}"}
+
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError as e:
+        return None, {"file": path, "row_idx": row_idx, "id": record_id,
+                      "error": f"inner_json_error: {e}"}
+
+    return {
+        "id": record_id,
+        "drug_intent": payload.get("drug_intent"),
+        "drug_intent_confidence": payload.get("drug_intent_confidence"),
+        "primary_indications": _normalise_disease_list(payload.get("primary_indications")),
+        "background_conditions": _normalise_disease_list(payload.get("background_conditions")),
+        "investigated_drugs": _normalise_drug_list(payload.get("investigated_drugs")),
+        "comparator_drugs": _normalise_drug_list(payload.get("comparator_drugs")),
+        "supportive_drugs": _normalise_drug_list(payload.get("supportive_drugs")),
+        "conclusion": payload.get("conclusion"),
+    }, None
+
+
 def parse_indication_batch_results(output_dir: str) -> pl.DataFrame:
     """Read LLM extraction output files and output a dataframe with the expected schema we pass to the LLM.
 
     Every column is present in every row; missing optional fields are null.
     """
-    import json
-    import fsspec
-
-    def _normalise_disease(raw: dict) -> dict:
-        """Fill every ExtractedDisease field, defaulting missing ones to None."""
-        return {
-            "name": raw.get("name"),
-            "severity": raw.get("severity"),
-            "stage": raw.get("stage"),
-            "onset": raw.get("onset"),
-            "etiology": raw.get("etiology"),
-            "evidence_quote": raw.get("evidence_quote"),
-        }
-
-
-    def _normalise_drug(raw: dict) -> dict:
-        """Fill every ExtractedDrug field, defaulting missing ones to None."""
-        return {
-            "drug": raw.get("drug"),
-            "route": raw.get("route"),
-            "formulation": raw.get("formulation"),
-            "synonyms": raw.get("synonyms"),      # already list[str] | None
-            "dosages": raw.get("dosages"),         # already list[str] | None
-            "evidence_quote": raw.get("evidence_quote"),
-        }
-
-
-    def _normalise_disease_list(items: list | None) -> list[dict]:
-        if not items:
-            return []
-        return [_normalise_disease(x) for x in items if isinstance(x, dict)]
-
-
-    def _normalise_drug_list(items: list | None) -> list[dict]:
-        if not items:
-            return []
-        return [_normalise_drug(x) for x in items if isinstance(x, dict)]
     
     fs, root = fsspec.core.url_to_fs(output_dir)
     all_paths = fs.find(root)
@@ -183,44 +218,11 @@ def parse_indication_batch_results(output_dir: str) -> pl.DataFrame:
                     continue
                 
                 # Parse Batch response
-                record_id = outer.get("custom_id")
-                try:
-                    text = outer["response"]["body"]["output"][0]["content"][0]["text"]
-                except Exception as e:
-                    bad_records.append({"file": path, "row_idx": row_idx, "id": record_id,
-                                        "error": f"missing_text_path: {e}"})
-                    continue
-
-                try:
-                    payload = json.loads(text)
-                except json.JSONDecodeError as e:
-                    bad_records.append({"file": path, "row_idx": row_idx, "id": record_id,
-                                        "error": f"inner_json_error: {e}"})
-                    continue
-
-                good_records.append(
-                    {
-                        "id": record_id,
-                        "drug_intent": payload.get("drug_intent"),
-                        "drug_intent_confidence": payload.get("drug_intent_confidence"),
-                        "primary_indications": _normalise_disease_list(
-                            payload.get("primary_indications")
-                        ),
-                        "background_conditions": _normalise_disease_list(
-                            payload.get("background_conditions")
-                        ),
-                        "investigated_drugs": _normalise_drug_list(
-                            payload.get("investigated_drugs")
-                        ),
-                        "comparator_drugs": _normalise_drug_list(
-                            payload.get("comparator_drugs")
-                        ),
-                        "supportive_drugs": _normalise_drug_list(
-                            payload.get("supportive_drugs")
-                        ),
-                        "conclusion": payload.get("conclusion"),
-                    }
-                )
+                good, bad = _parse_single_record(outer, path=path, row_idx=row_idx)
+                if good:
+                    good_records.append(good)
+                if bad:
+                    bad_records.append(bad)
 
     if bad_records:
         logger.warning(
