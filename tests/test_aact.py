@@ -107,10 +107,10 @@ def test_replace_with_llm_indications():
         "Original indications for LLM-covered trials must be fully replaced"
     )
 
-    # Uncovered trial is completely untouched
+    # Uncovered trial gets null indications
     nct2 = result.filter(pl.col("nct_id") == "NCT2")
-    assert nct2["diseaseFromSource"].to_list() == ["diabetes"]
-    assert nct2["drugFromSource"].to_list() == ["metformin"]
+    assert nct2["diseaseFromSource"].to_list() == [None]
+    assert nct2["drugFromSource"].to_list() == [None]
 
     # LLM-covered trial NCT3 should not have disease information
     # the result of the extraction was None
