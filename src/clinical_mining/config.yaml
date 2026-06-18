@@ -34,6 +34,7 @@ datasets:
   ttd_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/inputs/P1-05-Drug_disease.txt
   ema_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/inputs/medicines-output-medicines-report_en.xlsx
   pmda_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/inputs/pmda_approvals.pdf
+  llm_results: ${oc.env:HOME}/EBI/repos/clinical_mining/data/inputs/aact_extraction_batch_results/*_output.jsonl
   output_path: ${oc.env:HOME}/EBI/repos/clinical_mining/data/outputs
 
 # Workflow (populated by recipes)

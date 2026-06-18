@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import fsspec
 import json
 
 import polars as pl
-from loguru import logger
 
 from clinical_mining.data_sources.pubmed import build_publications_map
 
@@ -183,64 +181,3 @@ def _parse_single_record(outer: dict, path: str = "<test>", row_idx: int = 0) ->
         "supportive_drugs": _normalise_drug_list(payload.get("supportive_drugs")),
         "conclusion": payload.get("conclusion"),
     }, None
-
-
-def parse_batch_results(output_dir: str) -> pl.DataFrame:
-    """Read LLM extraction output files and output a dataframe with the expected schema we pass to the LLM.
-
-    Every column is present in every row; missing optional fields are null.
-    """
-    
-    fs, root = fsspec.core.url_to_fs(output_dir)
-    all_paths = fs.find(root)
-    output_files = sorted(p for p in all_paths if p.endswith("_output.jsonl"))
-    if not output_files:
-        raise ValueError(f"No *_output.jsonl files found under: {output_dir}")
-
-    good_records: list[dict] = []
-    bad_records: list[dict] = []
-    total_rows = 0
-
-    for path in output_files:
-        with fs.open(path, "rt", encoding="utf-8") as f:
-            for row_idx, line in enumerate(f):
-                line = line.strip()
-                if not line:
-                    continue
-                total_rows += 1
-                
-                # Parse Batch metadata
-                try:
-                    outer = json.loads(line)
-                except json.JSONDecodeError as e:
-                    bad_records.append({"file": path, "row_idx": row_idx, "id": None,
-                                        "error": f"outer_json_error: {e}"})
-                    continue
-                
-                # Parse Batch response
-                good, bad = _parse_single_record(outer, path=path, row_idx=row_idx)
-                if good:
-                    good_records.append(good)
-                if bad:
-                    bad_records.append(bad)
-
-    if bad_records:
-        logger.warning(
-            "Dropped {} malformed rows while parsing batch outputs from {}",
-            len(bad_records),
-            output_dir,
-        )
-        logger.warning("Sample malformed rows: {}", bad_records[:5])
-
-    logger.info(
-        "Parsed {} rows from {} output files (good={}, bad={})",
-        total_rows,
-        len(output_files),
-        len(good_records),
-        len(bad_records),
-    )
-
-    if not good_records:
-        return pl.DataFrame(schema=EXTRACTION_SCHEMA)
-
-    return pl.DataFrame(good_records, schema=EXTRACTION_SCHEMA)

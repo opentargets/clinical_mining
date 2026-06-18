@@ -21,6 +21,9 @@ inputs:
   disease_index_spark:
     format: parquet
     path: ${datasets.disease_index_path}
+  llm_results:
+    format: json
+    path: ${datasets.llm_results}
 
   studies:
     format: db_table
@@ -164,7 +167,7 @@ workflow:
               group_by: nct_id
               alias: literature
           detailed_descriptions: $detailed_descriptions
-          llm_extraction_df: $aact_batch_extraction
+          llm_extraction_df: $llm_results
 
       ttd_report:
         function: clinical_mining.data_sources.ttd.extract_clinical_report

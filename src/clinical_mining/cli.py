@@ -54,7 +54,7 @@ def _run_transform(workflow_cfg: DictConfig, cfg: DictConfig) -> dict[str, Any]:
         elif source.format == "parquet":
             data_store[name] = pl.read_parquet(source.path)
         elif source.format == "json":
-            data_store[name] = pl.read_ndjson(source.path)
+            data_store[name] = pl.read_ndjson(source.path, ignore_errors=True)
         else:
             raise ValueError(f"unsupported file format: {source.format}")
 
