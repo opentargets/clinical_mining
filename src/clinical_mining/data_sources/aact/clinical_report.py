@@ -154,14 +154,12 @@ def extract_clinical_report(
                             metadata_df = metadata_df.group_by(spec["group_by"]).agg(
                                 expr.alias(spec["alias"])
                             )
-                        else:
-                            raise ValueError(f"Missing columns for struct: {struct_cols}. Available columns: {metadata_df.columns}")
+                            break
                     elif key in metadata_df.columns:
                         metadata_df = metadata_df.group_by(spec["group_by"]).agg(
                             pl.col(key).alias(spec["alias"])
                         )
-                    else:
-                        raise ValueError(f"Missing column: {key}")
+                        break
             studies = studies.join(metadata_df, on="nct_id", how="left")
 
     trial_metadata_cols = [

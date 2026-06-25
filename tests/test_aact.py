@@ -152,4 +152,42 @@ def test_replace_with_llm_indications():
     # LLM integration is case insensitive
     nct4 = result.filter(pl.col("nct_id") == "NCT4")
     assert nct4["diseaseFromSource"].to_list() == ["congestive heart failure"]
+
+
+def test_extract_clinical_report_with_sponsors():
+    from clinical_mining.data_sources.aact import extract_clinical_report
+
+    sponsors = pl.DataFrame({
+        "nct_id": ["NCT0001", "NCT0001", "NCT0002"],
+        "agency_class": ["INDUSTRY", "NIH", "INDUSTRY"],
+        "lead_or_collaborator": ["lead", "collaborator", "lead"],
+        "name": ["Sponsor A", "Sponsor B", "Sponsor C"],
+    })
+
+    lead_sponsors = sponsors.filter(pl.col("lead_or_collaborator") == "lead")
+
+    aggregation_specs = {
+        "sponsor": {
+            "group_by": "nct_id",
+            "alias": "sponsor",
+            "struct": {
+                "agencyClass": "agency_class",
+                "name": "name",
+            },
+            "agg": "first",
+        }
+    }
+
+    result = extract_clinical_report(
+        studies=_make_studies(),
+        interventions=_make_interventions(),
+        conditions=_make_conditions(),
+        additional_metadata=[lead_sponsors],
+        aggregation_specs=aggregation_specs,
+    )
+
+    assert "trialSponsor" in result.df.columns
+    trial_sponsor_nct0001 = result.df.filter(pl.col("id") == "nct0001")["trialSponsor"].to_list()[0]
+    assert trial_sponsor_nct0001 == {"agencyClass": "INDUSTRY", "name": "Sponsor A"}
+
     
