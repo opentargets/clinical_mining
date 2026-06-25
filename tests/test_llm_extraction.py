@@ -4,13 +4,12 @@ import pytest
 from pydantic import ValidationError
 
 from clinical_mining.schemas import (
-    ClinicalReportExtraction,
+    ClinicalReportExtractionSchema as ClinicalReportExtraction,
     ExtractedDrug,
     ExtractedDisease,
 )
 from clinical_mining.data_sources.aact.llm_extractor import (
     _parse_single_record,
-    EXTRACTION_SCHEMA,
 )
 
 
@@ -726,48 +725,40 @@ class TestParseSingleRecord:
         good, bad = _parse_single_record(json.loads(self.SAMPLE_LINE))
 
         assert bad is None
-        assert good["id"] == "nct00031889"
-        assert good["drug_intent"] == "therapeutic"
-        assert good["drug_intent_confidence"] == pytest.approx(0.95)
+        assert good.id == "nct00031889"
+        assert good.drug_intent == "therapeutic"
+        assert good.drug_intent_confidence == pytest.approx(0.95)
 
     def test_primary_indications_parsed(self):
         good, _ = _parse_single_record(json.loads(self.SAMPLE_LINE))
 
-        assert len(good["primary_indications"]) == 1
-        ind = good["primary_indications"][0]
-        assert ind["name"] == "prostate cancer"
-        assert ind["stage"] == "stage IV"
-        assert ind["severity"] is None
-        assert ind["etiology"] is None
+        assert len(good.primary_indications) == 1
+        ind = good.primary_indications[0]
+        assert ind.name == "prostate cancer"
+        assert ind.stage == "stage IV"
+        assert ind.severity is None
+        assert ind.etiology is None
 
     def test_investigated_drugs_parsed(self):
         good, _ = _parse_single_record(json.loads(self.SAMPLE_LINE))
 
-        drugs = good["investigated_drugs"]
+        drugs = good.investigated_drugs
         assert len(drugs) == 2
-        names = {d["drug"] for d in drugs}
+        names = {d.drug for d in drugs}
         assert names == {"exemestane", "bicalutamide"}
 
-        exemestane = next(d for d in drugs if d["drug"] == "exemestane")
-        assert exemestane["route"] == "oral"
-        assert exemestane["formulation"] == "tablet"
-        assert exemestane["dosages"] == ["once daily"]
-        assert exemestane["synonyms"] is None
+        exemestane = next(d for d in drugs if d.drug == "exemestane")
+        assert exemestane.route == "oral"
+        assert exemestane.formulation == "tablet"
+        assert exemestane.dosages == ["once daily"]
+        assert exemestane.synonyms is None
 
-    def test_optional_list_fields_are_empty_not_null(self):
-        """comparator_drugs and supportive_drugs are null in the payload —
-        normalised to [] so List(Struct) columns stay consistent."""
+    def test_optional_list_fields_are_none(self):
+        """comparator_drugs and supportive_drugs are null in the payload."""
         good, _ = _parse_single_record(json.loads(self.SAMPLE_LINE))
 
-        assert good["comparator_drugs"] == []
-        assert good["supportive_drugs"] == []
-
-    def test_record_builds_valid_dataframe(self):
-        good, _ = _parse_single_record(json.loads(self.SAMPLE_LINE))
-
-        df = pl.DataFrame([good], schema=EXTRACTION_SCHEMA)
-        assert df.shape == (1, len(EXTRACTION_SCHEMA))
-        assert df["drug_intent_confidence"].dtype == pl.Float64
+        assert good.comparator_drugs is None
+        assert good.supportive_drugs is None
 
     # ── error paths ───────────────────────────────────────────────────────────
 

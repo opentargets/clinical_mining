@@ -31,18 +31,38 @@ def process_conditions(conditions: pl.DataFrame) -> pl.DataFrame:
 
 def replace_with_llm_indications(
     studies: pl.DataFrame,
-    llm_extraction_df: pl.DataFrame,
+    extractions: pl.DataFrame,
 ) -> pl.DataFrame:
-    """Replace diseaseFromSource/drugFromSource with LLM-extracted indications for trials with available results.
+    """Replace diseaseFromSource/drugFromSource with LLM-extracted indications.
 
-    Trials not present in llm_extraction_df get null indications.
+    The *extractions* DataFrame must conform to the
+    ``ClinicalReportExtractionSchema`` (``id``, ``primary_indications``,
+    ``investigated_drugs``, …). Disease and drug names are extracted from
+    the ``.name`` and ``.drug`` struct fields respectively.
+
+    Trials not present in *extractions* get null indications.
     """
     llm_extracted = (
-        llm_extraction_df.rename(
-            {"id": "nct_id", "diseases": "diseaseFromSource", "drugs": "drugFromSource"}
+        extractions
+        .select(
+            nct_id=pl.col("id"),
+            diseaseFromSource=pl.col("primary_indications").list.eval(
+                pl.element().struct.field("name")
+            ),
+            drugFromSource=pl.col("investigated_drugs").list.eval(
+                pl.element().struct.field("drug")
+            ),
         )
-        .explode("diseaseFromSource")
-        .explode("drugFromSource")
+        .with_columns(
+            diseaseFromSource=pl.when(pl.col("diseaseFromSource").list.len() == 0)
+                .then(pl.lit(None, dtype=pl.List(pl.String)))
+                .otherwise(pl.col("diseaseFromSource")),
+            drugFromSource=pl.when(pl.col("drugFromSource").list.len() == 0)
+                .then(pl.lit(None, dtype=pl.List(pl.String)))
+                .otherwise(pl.col("drugFromSource")),
+        )
+        .explode("diseaseFromSource", empty_as_null=True)
+        .explode("drugFromSource", empty_as_null=True)
     )
 
     return pl.concat(
@@ -78,7 +98,7 @@ def extract_clinical_report(
     additional_metadata: list[pl.DataFrame] | None = None,
     aggregation_specs: dict[str, dict[str, str]] | None = None,
     detailed_descriptions: pl.DataFrame | None = None,
-    llm_extraction_df: pl.DataFrame | None = None,
+    llm_extractions: pl.DataFrame | None = None,
 ) -> ClinicalReport:
     """Return clinical trials with desired extra annotations from other tables."""
     STUDY_TYPES = ["INTERVENTIONAL", "OBSERVATIONAL", "EXPANDED_ACCESS"]
@@ -87,8 +107,8 @@ def extract_clinical_report(
     studies = studies.join(interventions, on="nct_id", how="left").join(
         conditions, on="nct_id", how="left"
     )
-    if llm_extraction_df is not None and not llm_extraction_df.is_empty():
-        studies = replace_with_llm_indications(studies, llm_extraction_df)
+    if llm_extractions:
+        studies = replace_with_llm_indications(studies, llm_extractions)
     if detailed_descriptions is not None:
         studies = studies.join(
             detailed_descriptions.rename({"description": "detailed_description"}),

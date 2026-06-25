@@ -14,6 +14,7 @@ import copy
 import json
 import logging
 import traceback
+from collections.abc import Sequence
 from importlib import import_module
 from pathlib import Path
 
@@ -294,21 +295,15 @@ async def _extract_record(
     }
 
 
-def _extractions_to_df(extractions: list[BaseModel]) -> pl.DataFrame:
+def _extractions_to_df(extractions: Sequence[BaseModel]) -> pl.DataFrame:
     """Serialise a list of Pydantic model instances into a Polars DataFrame.
 
-    Nested structures (lists, dicts) are JSON-encoded to preserve
-    Parquet round-trip compatibility.
+    Nested structures (lists of models) are preserved as typed
+    ``pl.List(pl.Struct(...))`` columns for native Parquet round-trip.
     """
-    rows = []
-    for ext in extractions:
-        row = ext.model_dump(exclude_none=True)
-        row = {
-            k: json.dumps(v) if isinstance(v, (list, dict)) else v
-            for k, v in row.items()
-        }
-        rows.append(row)
-    return pl.DataFrame(rows)
+    if not extractions:
+        return pl.DataFrame()
+    return pl.from_dicts([ext.model_dump() for ext in extractions])
 
 
 
@@ -326,7 +321,7 @@ def write_batch_files(
     Args:
         prompts (list[dict]): Preformed prompts with the query (e.g., the output of `data_sources.aact.llm_extractor.build_prompts`)
         system_prompt_path (str): Path to the system prompt file
-        model_class (str): Pydantic class with the output schema (e.g., 'clinical_mining.schemas.ClinicalReportExtraction')
+        model_class (str): Pydantic class with the output schema (e.g., 'clinical_mining.schemas.ClinicalReportExtractionSchema')
         out_dir (Path): Directory to write batch files
         batch_size (int): Number of requests per batch file
         service_tier (str): Service tier for the OpenAI Batch API (e.g., 'flex', 'auto')

@@ -14,7 +14,7 @@
 inputs:
   chembl_curation:
     format: parquet
-    path: data/inputs/chembl_mapping.parquet
+    path: ${oc.env:HOME}/EBI/repos/pipeline_work/input/clinical_report/chembl_mapping.parquet
   molecule_index_spark:
     format: parquet
     path: ${datasets.molecule_index_path}
@@ -167,7 +167,7 @@ workflow:
               group_by: nct_id
               alias: literature
           detailed_descriptions: $detailed_descriptions
-          llm_extraction_df: $llm_results
+          llm_extractions: $aact_batch_extraction
 
       ttd_report:
         function: clinical_mining.data_sources.ttd.extract_clinical_report
