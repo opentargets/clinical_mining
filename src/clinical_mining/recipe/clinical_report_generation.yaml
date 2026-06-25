@@ -76,6 +76,14 @@ inputs:
     select_cols:
       - nct_id
       - description
+  sponsors:
+    format: db_table
+    db: aact
+    select_cols:
+      - nct_id
+      - agency_class
+      - lead_or_collaborator
+      - name
 
   drug_indication:
     format: db_table
@@ -147,6 +155,12 @@ workflow:
         parameters:
           output_dir: ${datasets.llm_results}
 
+      lead_sponsors:
+        function: clinical_mining.utils.polars_helpers.filter_df
+        parameters:
+          df: $sponsors
+          expr: "lead_or_collaborator == 'lead'"
+
     # GENERATE: Steps that generate the core drug/indication DataFrames
     generate:
       chembl_indication_report:
@@ -169,11 +183,18 @@ workflow:
           studies: $studies
           interventions: $interventions
           conditions: $conditions
-          additional_metadata: ['$study_references', '$designs', '$brief_summaries']
+          additional_metadata: ['$study_references', '$designs', '$brief_summaries', '$lead_sponsors']
           aggregation_specs:
             pmid:
               group_by: nct_id
               alias: literature
+            sponsor:
+              group_by: nct_id
+              alias: sponsor
+              struct:
+                agencyClass: agency_class
+                name: name
+              agg: first
           detailed_descriptions: $detailed_descriptions
           llm_extractions: $aact_batch_extraction
 

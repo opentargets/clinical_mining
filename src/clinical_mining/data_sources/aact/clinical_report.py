@@ -1,6 +1,7 @@
 """Utils to transform AACT database to drug/indication relationships."""
 
 import polars as pl
+from typing import Any
 from clinical_mining.dataset import ClinicalReport
 from clinical_mining.schemas import ClinicalReportType
 
@@ -96,11 +97,27 @@ def extract_clinical_report(
     interventions: pl.DataFrame,
     conditions: pl.DataFrame,
     additional_metadata: list[pl.DataFrame] | None = None,
-    aggregation_specs: dict[str, dict[str, str]] | None = None,
+    aggregation_specs: dict[str, dict[str, Any]] | None = None,
     detailed_descriptions: pl.DataFrame | None = None,
     llm_extractions: pl.DataFrame | None = None,
 ) -> ClinicalReport:
-    """Return clinical trials with desired extra annotations from other tables."""
+    """Return clinical trials with desired extra annotations from other tables.
+    
+    Args:
+        studies: DataFrame with study information.
+        interventions: DataFrame with intervention information.
+        conditions: DataFrame with condition information.
+        additional_metadata: List of DataFrames with additional metadata.
+        aggregation_specs: Dictionary with aggregation specifications.
+        detailed_descriptions: DataFrame with detailed descriptions.
+        llm_extractions: DataFrame with LLM extractions.
+    
+    Returns:
+        ClinicalReport with desired extra annotations from other tables.
+        
+    Raises:
+        ValueError: If missing columns for struct.
+    """
     STUDY_TYPES = ["INTERVENTIONAL", "OBSERVATIONAL", "EXPANDED_ACCESS"]
     interventions = process_interventions(interventions)
     conditions = process_conditions(conditions)
@@ -119,10 +136,32 @@ def extract_clinical_report(
         for metadata_df in additional_metadata:
             if aggregation_specs:
                 for key, spec in aggregation_specs.items():
-                    if key in metadata_df.columns:
+                    if "struct" in spec and isinstance(spec["struct"], dict):
+                        struct_cols = list(spec["struct"].values())
+                        if all(col in metadata_df.columns for col in struct_cols):
+                            struct_expr = pl.struct([
+                                pl.col(str(col)).alias(str(field))
+                                for field, col in spec["struct"].items()
+                            ])
+                            agg_op = spec.get("agg", "first")
+                            if agg_op == "first":
+                                expr = struct_expr.first()
+                            elif agg_op == "unique":
+                                expr = struct_expr.unique()
+                            else:
+                                expr = struct_expr
+                            
+                            metadata_df = metadata_df.group_by(spec["group_by"]).agg(
+                                expr.alias(spec["alias"])
+                            )
+                        else:
+                            raise ValueError(f"Missing columns for struct: {struct_cols}. Available columns: {metadata_df.columns}")
+                    elif key in metadata_df.columns:
                         metadata_df = metadata_df.group_by(spec["group_by"]).agg(
                             pl.col(key).alias(spec["alias"])
                         )
+                    else:
+                        raise ValueError(f"Missing column: {key}")
             studies = studies.join(metadata_df, on="nct_id", how="left")
 
     trial_metadata_cols = [
