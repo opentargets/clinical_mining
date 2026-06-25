@@ -10,7 +10,8 @@
 #   uv run clinical_mining +recipe=clinical_report_generation
 # =================================================
 
-# Input Data Sources
+
+# Input Data Sources - loaded into a dataframe
 inputs:
   chembl_curation:
     format: parquet
@@ -112,8 +113,10 @@ inputs:
       - warning_type
       - warning_year
       - warning_country
+      - warning_class
       - efo_id
       - efo_term
+      - efo_id_for_warning_class
 
   warning_refs:
     format: db_table
@@ -132,12 +135,17 @@ workflow:
       pmda_raw:
         function: clinical_mining.data_sources.pmda.parse_pmda_approvals
         parameters:
-          pmda_path: ${datasets.pmda_path}
+          pmda: ${datasets.pmda_path}
 
+      ttd_raw:
+        function: clinical_mining.data_sources.ttd.extract_indication
+        parameters:
+          ttd_input: ${datasets.ttd_path}
+        
       aact_batch_extraction:
         function: clinical_mining.data_sources.aact.llm_extractor.parse_batch_results
         parameters:
-          output_dir: data/inputs/batch_downloads
+          output_dir: ${datasets.llm_results}
 
     # GENERATE: Steps that generate the core drug/indication DataFrames
     generate:
@@ -172,12 +180,12 @@ workflow:
       ttd_report:
         function: clinical_mining.data_sources.ttd.extract_clinical_report
         parameters:
-          indications: $ttd_indication
+          indications: $ttd_raw
 
       ema_report:
         function: clinical_mining.data_sources.ema.extract_clinical_report
         parameters:
-          indications_path: ${datasets.ema_path}
+          ema_input: ${datasets.ema_path}
           spark: $spark_session
 
       pmda_report:

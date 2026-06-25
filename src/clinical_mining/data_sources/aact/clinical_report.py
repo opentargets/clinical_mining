@@ -107,7 +107,7 @@ def extract_clinical_report(
     studies = studies.join(interventions, on="nct_id", how="left").join(
         conditions, on="nct_id", how="left"
     )
-    if llm_extractions:
+    if llm_extractions is not None:
         studies = replace_with_llm_indications(studies, llm_extractions)
     if detailed_descriptions is not None:
         studies = studies.join(

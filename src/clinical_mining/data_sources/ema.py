@@ -11,16 +11,16 @@ from pyspark.sql import SparkSession
 
 
 def extract_clinical_report(
-    indications: str | BytesIO | pl.DataFrame,
+    ema_input: str | BytesIO | pl.DataFrame,
     spark: SparkSession,
 ) -> ClinicalReport:
     """Extract clinical reports from the EMA list of human drugs."""
-    if isinstance(indications, pl.DataFrame):
-        raw_df = indications
+    if isinstance(ema_input, pl.DataFrame):
+        raw_df = ema_input
     else:
         # TODO: remove this when we have a proper way to load the data
         raw_df = pl.read_excel(
-            indications,
+            ema_input,
             sheet_name="Medicine",
         )
     raw_df.columns = list(raw_df.iter_rows().__next__())  # Assign columns names from first row
