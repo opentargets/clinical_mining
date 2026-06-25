@@ -81,6 +81,17 @@ def test_detailed_description_value_preserved():
 def test_replace_with_llm_indications():
     """Test that LLM indications replace source indications for LLM-covered trials."""
     from clinical_mining.data_sources.aact.clinical_report import replace_with_llm_indications
+
+    _disease_struct = pl.Struct({
+        "name": pl.String, "severity": pl.String, "stage": pl.String,
+        "onset": pl.String, "etiology": pl.String, "evidence_quote": pl.String,
+    })
+    _drug_struct = pl.Struct({
+        "drug": pl.String, "route": pl.String, "formulation": pl.String,
+        "synonyms": pl.List(pl.String), "dosages": pl.List(pl.String),
+        "evidence_quote": pl.String,
+    })
+
     studies = pl.DataFrame({
         "nct_id": ["NCT1", "NCT1", "NCT2", "NCT3", "NCT4"],
         "diseaseFromSource": ["colorectal cancer", "pain", "diabetes", "dementia", "heart failure"],
@@ -88,13 +99,33 @@ def test_replace_with_llm_indications():
         "trial_phase": ["PHASE2", "PHASE2", "PHASE3", "PHASE1", "PHASE4"],
     })
 
-    llm_extraction_df = pl.DataFrame({
-        "id": ["NCT1", "NCT3", "nct4"],
-        "diseases": [["metastatic colorectal cancer"], None, ["congestive heart failure"]],
-        "drugs": [["acetaminophen"], ["carbamazepine"], ["lisinopril"]],
-    })
+    _disease = lambda name: {"name": name, "severity": None, "stage": None,
+                             "onset": None, "etiology": None, "evidence_quote": name}
+    _drug = lambda name: {"drug": name, "route": None, "formulation": None,
+                          "synonyms": None, "dosages": None, "evidence_quote": name}
 
-    result = replace_with_llm_indications(studies, llm_extraction_df)
+    extractions = pl.DataFrame(
+        {
+            "id": ["NCT1", "NCT3", "nct4"],
+            "primary_indications": [
+                [_disease("metastatic colorectal cancer")],
+                [],
+                [_disease("congestive heart failure")],
+            ],
+            "investigated_drugs": [
+                [_drug("acetaminophen")],
+                [_drug("carbamazepine")],
+                [_drug("lisinopril")],
+            ],
+        },
+        schema={
+            "id": pl.String,
+            "primary_indications": pl.List(_disease_struct),
+            "investigated_drugs": pl.List(_drug_struct),
+        },
+    )
+
+    result = replace_with_llm_indications(studies, extractions)
 
     # LLM-covered trial uses LLM indications only — "pain" row is gone
     nct1_diseases = result.filter(pl.col("nct_id") == "NCT1")["diseaseFromSource"].to_list()

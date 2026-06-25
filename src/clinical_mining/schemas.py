@@ -304,7 +304,7 @@ class ExtractedDisease(BaseModel):
     )
 
 
-class ClinicalReportExtraction(BaseModel):
+class ClinicalReportExtractionSchema(BaseModel):
     """LLM-extracted structured information from a clinical trial report."""
 
     model_config = ConfigDict(validate_by_name=True, alias_generator=str.lower)

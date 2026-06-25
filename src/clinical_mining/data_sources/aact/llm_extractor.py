@@ -2,13 +2,20 @@
 
 from __future__ import annotations
 
-import fsspec
 import json
 
 import polars as pl
 from loguru import logger
+import fsspec
 
 from clinical_mining.data_sources.pubmed import build_publications_map
+from clinical_mining.dataset import ClinicalReportExtraction
+from clinical_mining.workflows.llm import _extractions_to_df
+from clinical_mining.schemas import (
+    ClinicalReportExtractionSchema,
+    ExtractedDrug,
+    ExtractedDisease,
+)
 
 
 def filter_by_id(report: pl.DataFrame, id_value: str | None) -> pl.DataFrame:
@@ -152,13 +159,13 @@ def _normalise_drug_list(items: list | None) -> list[dict]:
         return []
     return [_normalise_drug(x) for x in items if isinstance(x, dict)]
 
-def _parse_single_record(outer: dict, path: str = "<test>", row_idx: int = 0) -> tuple[dict | None, dict | None]:
-    """Parse a single decoded JSONL envelope into a good or bad record.
-    
-    Returns (good_record, None) on success, (None, bad_record) on failure.
-    Extracted so it can be unit-tested without filesystem setup.
+def _parse_single_record(outer: dict, path: str = "<test>", row_idx: int = 0) -> tuple[ClinicalReportExtractionSchema | None, dict | None]:
+    """Parse a single decoded JSONL envelope into a typed extraction object.
+
+    Returns (ClinicalReportExtractionSchema, None) on success,
+    (None, bad_record_dict) on failure.
     """
-    record_id = outer.get("custom_id")
+    record_id = outer.get("custom_id", "")
 
     try:
         text = outer["response"]["body"]["output"][0]["content"][0]["text"]
@@ -172,23 +179,49 @@ def _parse_single_record(outer: dict, path: str = "<test>", row_idx: int = 0) ->
         return None, {"file": path, "row_idx": row_idx, "id": record_id,
                       "error": f"inner_json_error: {e}"}
 
-    return {
-        "id": record_id,
-        "drug_intent": payload.get("drug_intent"),
-        "drug_intent_confidence": payload.get("drug_intent_confidence"),
-        "primary_indications": _normalise_disease_list(payload.get("primary_indications")),
-        "background_conditions": _normalise_disease_list(payload.get("background_conditions")),
-        "investigated_drugs": _normalise_drug_list(payload.get("investigated_drugs")),
-        "comparator_drugs": _normalise_drug_list(payload.get("comparator_drugs")),
-        "supportive_drugs": _normalise_drug_list(payload.get("supportive_drugs")),
-        "conclusion": payload.get("conclusion"),
-    }, None
+    try:
+        extraction = ClinicalReportExtractionSchema(
+            id=record_id,
+            drug_intent=payload.get("drug_intent"),
+            drug_intent_confidence=payload.get("drug_intent_confidence"),
+            primary_indications=[
+                ExtractedDisease(**d)
+                for d in _normalise_disease_list(payload.get("primary_indications"))
+                if d.get("name")
+            ],
+            background_conditions=[
+                ExtractedDisease(**d)
+                for d in _normalise_disease_list(payload.get("background_conditions"))
+                if d.get("name")
+            ] or None,
+            investigated_drugs=[
+                ExtractedDrug(**d)
+                for d in _normalise_drug_list(payload.get("investigated_drugs"))
+                if d.get("drug")
+            ],
+            comparator_drugs=[
+                ExtractedDrug(**d)
+                for d in _normalise_drug_list(payload.get("comparator_drugs"))
+                if d.get("drug")
+            ] or None,
+            supportive_drugs=[
+                ExtractedDrug(**d)
+                for d in _normalise_drug_list(payload.get("supportive_drugs"))
+                if d.get("drug")
+            ] or None,
+            conclusion=payload.get("conclusion"),
+        )
+    except Exception as e:
+        return None, {"file": path, "row_idx": row_idx, "id": record_id,
+                      "error": f"model_validation_error: {e}"}
+
+    return extraction, None
 
 
-def parse_batch_results(output_dir: str) -> pl.DataFrame:
-    """Read LLM extraction output files and output a dataframe with the expected schema we pass to the LLM.
+def parse_batch_results(output_dir: str) -> ClinicalReportExtraction:
+    """Read LLM extraction output files and return a validated dataset.
 
-    Every column is present in every row; missing optional fields are null.
+    Returns an empty dataset when no valid records are found.
     """
     
     fs, root = fsspec.core.url_to_fs(output_dir)
@@ -197,7 +230,7 @@ def parse_batch_results(output_dir: str) -> pl.DataFrame:
     if not output_files:
         raise ValueError(f"No *_output.jsonl files found under: {output_dir}")
 
-    good_records: list[dict] = []
+    good_records: list[ClinicalReportExtractionSchema] = []
     bad_records: list[dict] = []
     total_rows = 0
 
@@ -209,7 +242,6 @@ def parse_batch_results(output_dir: str) -> pl.DataFrame:
                     continue
                 total_rows += 1
                 
-                # Parse Batch metadata
                 try:
                     outer = json.loads(line)
                 except json.JSONDecodeError as e:
@@ -217,7 +249,6 @@ def parse_batch_results(output_dir: str) -> pl.DataFrame:
                                         "error": f"outer_json_error: {e}"})
                     continue
                 
-                # Parse Batch response
                 good, bad = _parse_single_record(outer, path=path, row_idx=row_idx)
                 if good:
                     good_records.append(good)
@@ -240,7 +271,4 @@ def parse_batch_results(output_dir: str) -> pl.DataFrame:
         len(bad_records),
     )
 
-    if not good_records:
-        return pl.DataFrame(schema=EXTRACTION_SCHEMA)
-
-    return pl.DataFrame(good_records, schema=EXTRACTION_SCHEMA)
+    return ClinicalReportExtraction(_extractions_to_df(good_records))
