@@ -108,7 +108,7 @@ workflow:
         function: clinical_mining.workflows.llm.run_extraction
         parameters:
           prompts: $prompts
-          model_class: clinical_mining.schemas.ClinicalReportExtraction
+          model_class: clinical_mining.schemas.ClinicalReportExtractionSchema
           system_prompt_path: src/clinical_mining/prompts/aact_llm.txt
           model: gpt-4.1-mini
           openai_key: ${oc.env:OPENAI_API_KEY,""}
