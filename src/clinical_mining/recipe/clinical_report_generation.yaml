@@ -160,6 +160,12 @@ workflow:
         parameters:
           df: $sponsors
           expr: "lead_or_collaborator == 'lead'"
+      
+      defailed_descriptions_rename:
+        function: clinical_mining.utils.polars_helpers.rename_columns
+        parameters:
+          df: $detailed_descriptions
+          col_names_map: {"description": "detailed_description"}
 
     # GENERATE: Steps that generate the core drug/indication DataFrames
     generate:
@@ -183,7 +189,7 @@ workflow:
           studies: $studies
           interventions: $interventions
           conditions: $conditions
-          additional_metadata: ['$study_references', '$designs', '$brief_summaries', '$lead_sponsors']
+          additional_metadata: ['$study_references', '$designs', '$brief_summaries', '$lead_sponsors', '$detailed_descriptions_rename']
           aggregation_specs:
             pmid:
               group_by: nct_id
@@ -195,7 +201,6 @@ workflow:
                 agencyClass: agency_class
                 name: name
               agg: first
-          detailed_descriptions: $detailed_descriptions
           llm_extractions: $aact_batch_extraction
 
       ttd_report:

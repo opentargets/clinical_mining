@@ -158,3 +158,8 @@ def filter_df(df: pl.DataFrame, expr: str | pl.Expr) -> pl.DataFrame:
     ctx.register("df", df)
 
     return ctx.execute(f"SELECT * FROM df WHERE {expr}").collect()
+
+
+def rename_columns(df: pl.DataFrame, col_names_map: dict[str, str]) -> pl.DataFrame:
+    """Rename column(s) in a Polars DataFrame."""
+    return df.rename(col_names_map)

@@ -5,7 +5,7 @@ from typing import Any
 import polars as pl
 
 from clinical_mining.dataset import ClinicalReport
-from clinical_mining.schemas import ClinicalReportType
+from clinical_mining.schemas import ClinicalReportType, ClinicalSource
 
 
 def process_interventions(interventions: pl.DataFrame) -> pl.DataFrame:
@@ -99,7 +99,6 @@ def extract_clinical_report(
     conditions: pl.DataFrame,
     additional_metadata: list[pl.DataFrame] | None = None,
     aggregation_specs: dict[str, dict[str, Any]] | None = None,
-    detailed_descriptions: pl.DataFrame | None = None,
     llm_extractions: pl.DataFrame | None = None,
 ) -> ClinicalReport:
     """Return clinical trials with desired extra annotations from other tables.
@@ -110,7 +109,6 @@ def extract_clinical_report(
         conditions: DataFrame with condition information.
         additional_metadata: List of DataFrames with additional metadata.
         aggregation_specs: Dictionary with aggregation specifications.
-        detailed_descriptions: DataFrame with detailed descriptions.
         llm_extractions: DataFrame with LLM extractions.
 
     Returns:
@@ -124,12 +122,6 @@ def extract_clinical_report(
     )
     if llm_extractions is not None:
         studies = replace_with_llm_indications(studies, llm_extractions)
-    if detailed_descriptions is not None:
-        studies = studies.join(
-            detailed_descriptions.rename({"description": "detailed_description"}),
-            on="nct_id",
-            how="left",
-        )
     if additional_metadata is not None:
         for metadata_df in additional_metadata:
             if aggregation_specs:
@@ -181,7 +173,7 @@ def extract_clinical_report(
             .otherwise(pl.lit(None))
         )
         .with_columns(
-            source=pl.lit("AACT"),
+            source=pl.lit(ClinicalSource.AACT.value),
             url=pl.concat_str(
                 [pl.lit("https://clinicaltrials.gov/study/"), pl.col("id")],
                 separator="",

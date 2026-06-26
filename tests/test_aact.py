@@ -44,12 +44,15 @@ def test_detailed_descriptions_column_present():
             "description": ["A detailed protocol description."],
         }
     )
+    detailed_descriptions_rename = detailed_descriptions.rename(
+        {"description": "detailed_description"}
+    )
 
     result = extract_clinical_report(
         studies=_make_studies(),
         interventions=_make_interventions(),
         conditions=_make_conditions(),
-        detailed_descriptions=detailed_descriptions,
+        additional_metadata=[detailed_descriptions_rename],
     )
 
     assert "trialDetailedDescription" in result.df.columns
@@ -76,12 +79,15 @@ def test_detailed_description_value_preserved():
             "description": ["Detailed protocol text."],
         }
     )
+    detailed_descriptions_rename = detailed_descriptions.rename(
+        {"description": "detailed_description"}
+    )
 
     result = extract_clinical_report(
         studies=_make_studies(),
         interventions=_make_interventions(),
         conditions=_make_conditions(),
-        detailed_descriptions=detailed_descriptions,
+        additional_metadata=[detailed_descriptions_rename],
     )
 
     values = result.df["trialDetailedDescription"].to_list()
