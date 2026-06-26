@@ -100,21 +100,19 @@ def _apply_chembl_curation_mapping(
         )
     )
 
-    joined = (
-        df_norm.join(
-            curation_drug_lut,
-            on=["__study_id_norm", "__drug_label_norm"],
-            how="left",
-        )
-        .join(
-            curation_disease_lut,
-            on=["__study_id_norm", "__disease_label_norm"],
-            how="left",
-        )
+    joined = df_norm.join(
+        curation_drug_lut,
+        on=["__study_id_norm", "__drug_label_norm"],
+        how="left",
+    ).join(
+        curation_disease_lut,
+        on=["__study_id_norm", "__disease_label_norm"],
+        how="left",
     )
 
     drug_filled_rows = joined.filter(
-        pl.col(drug_id_column_name).is_null() & pl.col("__curated_drug_ids").is_not_null()
+        pl.col(drug_id_column_name).is_null()
+        & pl.col("__curated_drug_ids").is_not_null()
     ).height
     disease_filled_rows = joined.filter(
         pl.col(disease_id_column_name).is_null()
@@ -209,7 +207,8 @@ def map_entities(
     disease_id_column_name: str = "diseaseId",
     ner_extract_drug: bool = True,
     ner_batch_size: int = 256,
-    ner_cache_path: str | None = f".cache/ner/{datetime.now().strftime('%Y%m%d')}.parquet",
+    ner_cache_path: str
+    | None = f".cache/ner/{datetime.now().strftime('%Y%m%d')}.parquet",
 ) -> pl.DataFrame:
     """Map drug and disease entities to their standardised IDs using OnToma.
 
@@ -239,7 +238,9 @@ def map_entities(
     # Ensure they exist before we attempt to coalesce them with newly mapped IDs.
     missing_id_cols: list[pl.Expr] = []
     if disease_id_column_name not in df.columns:
-        missing_id_cols.append(pl.lit(None).cast(pl.String).alias(disease_id_column_name))
+        missing_id_cols.append(
+            pl.lit(None).cast(pl.String).alias(disease_id_column_name)
+        )
     if drug_id_column_name not in df.columns:
         missing_id_cols.append(pl.lit(None).cast(pl.String).alias(drug_id_column_name))
     if missing_id_cols:
@@ -267,7 +268,10 @@ def map_entities(
         .unique()
     )
     drug_queries = (
-        df.filter(pl.col(drug_column_name).is_not_null() & pl.col(drug_id_column_name).is_null())
+        df.filter(
+            pl.col(drug_column_name).is_not_null()
+            & pl.col(drug_id_column_name).is_null()
+        )
         .select(pl.col(drug_column_name).alias("query_label"))
         .with_columns(pl.lit("CD").alias("entity_type"))
         .unique()
@@ -328,14 +332,20 @@ def map_entities(
                     )
                     logger.info(f"loaded ner cache from: {ner_cache_path}")
                 except Exception:
-                    logger.info(f"no existing cache found at: {ner_cache_path}, will compute all labels")
+                    logger.info(
+                        f"no existing cache found at: {ner_cache_path}, will compute all labels"
+                    )
 
             new_count = labels_to_process.count()
 
             if new_count > 0:
                 logger.info(
                     f"applying ner to {new_count} new drug labels"
-                    + (f" (using cache for {unmapped_count - new_count})" if cached_ner is not None else "")
+                    + (
+                        f" (using cache for {unmapped_count - new_count})"
+                        if cached_ner is not None
+                        else ""
+                    )
                 )
                 new_ner_results = extract_drug_entities(
                     spark=spark,
@@ -348,19 +358,25 @@ def map_entities(
                     batch_size=ner_batch_size,
                 )
                 ner_extracted_raw = (
-                    cached_ner.union(new_ner_results) if cached_ner is not None else new_ner_results
+                    cached_ner.union(new_ner_results)
+                    if cached_ner is not None
+                    else new_ner_results
                 )
 
                 if ner_cache_path is not None:
                     logger.info(f"updating cache: {ner_cache_path}")
                     ner_extracted_raw.toPandas().to_parquet(ner_cache_path)
             else:
-                logger.info(f"all {unmapped_count} labels found in cache, skipping ner extraction")
+                logger.info(
+                    f"all {unmapped_count} labels found in cache, skipping ner extraction"
+                )
                 ner_extracted_raw = cached_ner
 
             if ner_extracted_raw is None:
                 logger.info("ner cache returned no rows, skipping ner fallback")
-                ner_aggregated = spark.createDataFrame([], "query_label string, ner_mapped_ids array<string>")
+                ner_aggregated = spark.createDataFrame(
+                    [], "query_label string, ner_mapped_ids array<string>"
+                )
             else:
                 assert ner_extracted_raw is not None
                 ner_extracted = ner_extracted_raw.filter(

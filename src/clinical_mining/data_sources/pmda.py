@@ -278,7 +278,7 @@ def parse_pmda_approvals(pmda: str | BytesIO | pdfplumber.pdf.PDF) -> pl.DataFra
 
     all_records = []
     last_structure: ColumnStructure | None = None
-    
+
     # Work-around for passing pdfplumber.pdf.PDF object directly for an OT release
     if isinstance(pmda, pdfplumber.pdf.PDF):
         pdf = pmda

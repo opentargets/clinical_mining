@@ -48,11 +48,13 @@ def convert_polars_to_spark(
         Spark DataFrame with optimized partitioning and preserved schema
     """
     # Extract and convert schema from Polars
-    spark_schema = StructType([
-        StructField(name, polars_to_spark_type(dtype), True)
-        for name, dtype in polars_df.schema.items()
-    ])
-    
+    spark_schema = StructType(
+        [
+            StructField(name, polars_to_spark_type(dtype), True)
+            for name, dtype in polars_df.schema.items()
+        ]
+    )
+
     total_rows = len(polars_df)
 
     if total_rows <= chunk_size:

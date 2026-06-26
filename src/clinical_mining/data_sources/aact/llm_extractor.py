@@ -25,7 +25,9 @@ def filter_by_id(report: pl.DataFrame, id_value: str | None) -> pl.DataFrame:
     return report.filter(pl.col("id") == id_value.lower())
 
 
-def sample_report(report: pl.DataFrame, sample_size: int | None, seed: int = 42) -> pl.DataFrame:
+def sample_report(
+    report: pl.DataFrame, sample_size: int | None, seed: int = 42
+) -> pl.DataFrame:
     """Sample trials before expensive downstream steps.
 
     Returns full report when sample_size is None or >= row count.
@@ -63,7 +65,9 @@ def build_prompt(
     for field, label in trial_fields.items():
         value = row.get(field)
         lines.append(f"{label}: {value if value is not None else 'null'}")
-    drugs = [d["drugFromSource"] for d in (row.get("drugs") or []) if d.get("drugFromSource")]
+    drugs = [
+        d["drugFromSource"] for d in (row.get("drugs") or []) if d.get("drugFromSource")
+    ]
     if drugs:
         lines.append(f"Interventions: {'; '.join(drugs)}")
     if publications:
@@ -88,6 +92,7 @@ def fetch_publications(
     records = report.to_dicts()
     pubs = build_publications_map(records, max_pubs=max_publications)
     return pubs
+
 
 _DISEASE_STRUCT = pl.Struct(
     {
@@ -142,8 +147,8 @@ def _normalise_drug(raw: dict) -> dict:
         "drug": raw.get("drug"),
         "route": raw.get("route"),
         "formulation": raw.get("formulation"),
-        "synonyms": raw.get("synonyms"),      # already list[str] | None
-        "dosages": raw.get("dosages"),         # already list[str] | None
+        "synonyms": raw.get("synonyms"),  # already list[str] | None
+        "dosages": raw.get("dosages"),  # already list[str] | None
         "evidence_quote": raw.get("evidence_quote"),
     }
 
@@ -159,7 +164,10 @@ def _normalise_drug_list(items: list | None) -> list[dict]:
         return []
     return [_normalise_drug(x) for x in items if isinstance(x, dict)]
 
-def _parse_single_record(outer: dict, path: str = "<test>", row_idx: int = 0) -> tuple[ClinicalReportExtractionSchema | None, dict | None]:
+
+def _parse_single_record(
+    outer: dict, path: str = "<test>", row_idx: int = 0
+) -> tuple[ClinicalReportExtractionSchema | None, dict | None]:
     """Parse a single decoded JSONL envelope into a typed extraction object.
 
     Returns (ClinicalReportExtractionSchema, None) on success,
@@ -170,14 +178,22 @@ def _parse_single_record(outer: dict, path: str = "<test>", row_idx: int = 0) ->
     try:
         text = outer["response"]["body"]["output"][0]["content"][0]["text"]
     except Exception as e:
-        return None, {"file": path, "row_idx": row_idx, "id": record_id,
-                      "error": f"missing_text_path: {e}"}
+        return None, {
+            "file": path,
+            "row_idx": row_idx,
+            "id": record_id,
+            "error": f"missing_text_path: {e}",
+        }
 
     try:
         payload = json.loads(text)
     except json.JSONDecodeError as e:
-        return None, {"file": path, "row_idx": row_idx, "id": record_id,
-                      "error": f"inner_json_error: {e}"}
+        return None, {
+            "file": path,
+            "row_idx": row_idx,
+            "id": record_id,
+            "error": f"inner_json_error: {e}",
+        }
 
     try:
         extraction = ClinicalReportExtractionSchema(
@@ -193,7 +209,8 @@ def _parse_single_record(outer: dict, path: str = "<test>", row_idx: int = 0) ->
                 ExtractedDisease(**d)
                 for d in _normalise_disease_list(payload.get("background_conditions"))
                 if d.get("name")
-            ] or None,
+            ]
+            or None,
             investigated_drugs=[
                 ExtractedDrug(**d)
                 for d in _normalise_drug_list(payload.get("investigated_drugs"))
@@ -203,17 +220,23 @@ def _parse_single_record(outer: dict, path: str = "<test>", row_idx: int = 0) ->
                 ExtractedDrug(**d)
                 for d in _normalise_drug_list(payload.get("comparator_drugs"))
                 if d.get("drug")
-            ] or None,
+            ]
+            or None,
             supportive_drugs=[
                 ExtractedDrug(**d)
                 for d in _normalise_drug_list(payload.get("supportive_drugs"))
                 if d.get("drug")
-            ] or None,
+            ]
+            or None,
             conclusion=payload.get("conclusion"),
         )
     except Exception as e:
-        return None, {"file": path, "row_idx": row_idx, "id": record_id,
-                      "error": f"model_validation_error: {e}"}
+        return None, {
+            "file": path,
+            "row_idx": row_idx,
+            "id": record_id,
+            "error": f"model_validation_error: {e}",
+        }
 
     return extraction, None
 
@@ -223,7 +246,7 @@ def parse_batch_results(output_dir: str) -> ClinicalReportExtraction:
 
     Returns an empty dataset when no valid records are found.
     """
-    
+
     fs, root = fsspec.core.url_to_fs(output_dir)
     all_paths = fs.find(root)
     output_files = sorted(p for p in all_paths if p.endswith("_output.jsonl"))
@@ -241,14 +264,20 @@ def parse_batch_results(output_dir: str) -> ClinicalReportExtraction:
                 if not line:
                     continue
                 total_rows += 1
-                
+
                 try:
                     outer = json.loads(line)
                 except json.JSONDecodeError as e:
-                    bad_records.append({"file": path, "row_idx": row_idx, "id": None,
-                                        "error": f"outer_json_error: {e}"})
+                    bad_records.append(
+                        {
+                            "file": path,
+                            "row_idx": row_idx,
+                            "id": None,
+                            "error": f"outer_json_error: {e}",
+                        }
+                    )
                     continue
-                
+
                 good, bad = _parse_single_record(outer, path=path, row_idx=row_idx)
                 if good:
                     good_records.append(good)

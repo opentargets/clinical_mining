@@ -46,8 +46,7 @@ def replace_with_llm_indications(
     Trials not present in *extractions* get null indications.
     """
     llm_extracted = (
-        extractions
-        .select(
+        extractions.select(
             nct_id=pl.col("id"),
             diseaseFromSource=pl.col("primary_indications").list.eval(
                 pl.element().struct.field("name")
@@ -58,11 +57,11 @@ def replace_with_llm_indications(
         )
         .with_columns(
             diseaseFromSource=pl.when(pl.col("diseaseFromSource").list.len() == 0)
-                .then(pl.lit(None, dtype=pl.List(pl.String)))
-                .otherwise(pl.col("diseaseFromSource")),
+            .then(pl.lit(None, dtype=pl.List(pl.String)))
+            .otherwise(pl.col("diseaseFromSource")),
             drugFromSource=pl.when(pl.col("drugFromSource").list.len() == 0)
-                .then(pl.lit(None, dtype=pl.List(pl.String)))
-                .otherwise(pl.col("drugFromSource")),
+            .then(pl.lit(None, dtype=pl.List(pl.String)))
+            .otherwise(pl.col("drugFromSource")),
         )
         .explode("diseaseFromSource", empty_as_null=True)
         .explode("drugFromSource", empty_as_null=True)
@@ -104,7 +103,7 @@ def extract_clinical_report(
     llm_extractions: pl.DataFrame | None = None,
 ) -> ClinicalReport:
     """Return clinical trials with desired extra annotations from other tables.
-    
+
     Args:
         studies: DataFrame with study information.
         interventions: DataFrame with intervention information.
@@ -113,7 +112,7 @@ def extract_clinical_report(
         aggregation_specs: Dictionary with aggregation specifications.
         detailed_descriptions: DataFrame with detailed descriptions.
         llm_extractions: DataFrame with LLM extractions.
-    
+
     Returns:
         ClinicalReport with desired extra annotations from other tables.
     """
@@ -138,10 +137,12 @@ def extract_clinical_report(
                     if "struct" in spec and isinstance(spec["struct"], dict):
                         struct_cols = list(spec["struct"].values())
                         if all(col in metadata_df.columns for col in struct_cols):
-                            struct_expr = pl.struct([
-                                pl.col(str(col)).alias(str(field))
-                                for field, col in spec["struct"].items()
-                            ])
+                            struct_expr = pl.struct(
+                                [
+                                    pl.col(str(col)).alias(str(field))
+                                    for field, col in spec["struct"].items()
+                                ]
+                            )
                             agg_op = spec.get("agg", "first")
                             if agg_op == "first":
                                 expr = struct_expr.first()
@@ -149,7 +150,7 @@ def extract_clinical_report(
                                 expr = struct_expr.unique()
                             else:
                                 expr = struct_expr
-                            
+
                             metadata_df = metadata_df.group_by(spec["group_by"]).agg(
                                 expr.alias(spec["alias"])
                             )

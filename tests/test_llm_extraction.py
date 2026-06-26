@@ -712,6 +712,7 @@ def test_search_drug_disease_plausibility_returns_bool():
         assert isinstance(result, bool)
         assert result is True
 
+
 class TestParseSingleRecord:
     """Unit tests for _parse_single_record."""
 

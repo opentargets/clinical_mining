@@ -48,7 +48,9 @@ def _get_callable(function_path: str) -> Callable[..., Any]:
         raise ImportError(f"Could not import function '{function_path}': {e}")
 
 
-def _resolve_params(params: dict[str, Any], data_store: dict[str, Any]) -> dict[str, Any]:
+def _resolve_params(
+    params: dict[str, Any], data_store: dict[str, Any]
+) -> dict[str, Any]:
     """Resolves parameter values from the data_store."""
     resolved_params = {}
     for name, value in params.items():

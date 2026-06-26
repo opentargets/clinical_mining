@@ -14,7 +14,7 @@ def extract_chembl_ct_curation(
     oracle_client_path: str,
 ) -> pl.DataFrame:
     """Reads the following tables from ChEMBL Clinical Trials Curation database:
-    
+
     CT_NCTID_CONDITION_EFO: Clinical trial to EFO mapping
     CT_NCT_ID2MOLREGNO: Clinical trial to MOLREGNO mapping (internal ChEMBL drug ID)
     MOLECULE_DICTIONARY: MOLREGNO to ChEMBL ID mapping

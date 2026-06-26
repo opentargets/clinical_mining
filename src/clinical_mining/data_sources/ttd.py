@@ -6,7 +6,7 @@ from clinical_mining.schemas import ClinicalReportType
 
 def extract_indication(ttd_input: str | list[str]) -> pl.DataFrame:
     """Extract indications from TTD Indications dataset.
-    
+
     Args:
         ttd_input: Path to TTD Indications dataset or list of strings containing the dataset.
     """

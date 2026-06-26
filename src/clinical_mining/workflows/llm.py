@@ -306,7 +306,6 @@ def _extractions_to_df(extractions: Sequence[BaseModel]) -> pl.DataFrame:
     return pl.from_dicts([ext.model_dump() for ext in extractions])
 
 
-
 def write_batch_files(
     prompts: list[dict],
     system_prompt_path: str,
@@ -317,7 +316,7 @@ def write_batch_files(
     model: str = "gpt-4.1-mini",
 ) -> None:
     """Prepare batches of JSON lines to submit to the OpenAI Batch API.
-    
+
     Args:
         prompts (list[dict]): Preformed prompts with the query (e.g., the output of `data_sources.aact.llm_extractor.build_prompts`)
         system_prompt_path (str): Path to the system prompt file
@@ -327,6 +326,7 @@ def write_batch_files(
         service_tier (str): Service tier for the OpenAI Batch API (e.g., 'flex', 'auto')
         model (str): Model to use for the OpenAI Batch API (default: 'gpt-4.1-mini')
     """
+
     def _iter_chunks(items: list[dict], chunk_size: int):
         for i in range(0, len(items), chunk_size):
             yield i // chunk_size, items[i : i + chunk_size]
@@ -389,7 +389,9 @@ def write_batch_files(
             }
         )
 
-    (out_dir / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    (out_dir / "manifest.json").write_text(
+        json.dumps(manifest, indent=2), encoding="utf-8"
+    )
     logger.info(
         "Wrote {} requests into {} batch files under {}",
         len(prompts),

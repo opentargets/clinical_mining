@@ -82,6 +82,7 @@ def _run_transform(workflow_cfg: DictConfig, cfg: DictConfig) -> dict[str, Any]:
             logger.info(f"output {output_name} written to {output_dir}")
         elif isinstance(v, dict):
             import json
+
             out_path = output_dir / f"{output_name}.json"
             with out_path.open("w") as f:
                 json.dump(v, f, indent=2, default=str)
@@ -99,7 +100,9 @@ def main(cfg: DictConfig) -> dict[str, Any]:
     """Main function to run clinical mining workflows."""
     workflow = cfg.get("workflow")
     if not workflow:
-        logger.info("No workflow defined. Add a recipe to activate a workflow (e.g. +recipe=<name>).")
+        logger.info(
+            "No workflow defined. Add a recipe to activate a workflow (e.g. +recipe=<name>)."
+        )
         return {}
 
     for name, section in workflow.items():

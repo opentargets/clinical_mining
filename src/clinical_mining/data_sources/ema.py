@@ -23,7 +23,9 @@ def extract_clinical_report(
             ema_input,
             sheet_name="Medicine",
         )
-    raw_df.columns = list(raw_df.iter_rows().__next__())  # Assign columns names from first row
+    raw_df.columns = list(
+        raw_df.iter_rows().__next__()
+    )  # Assign columns names from first row
 
     human_indications = raw_df.slice(1).filter(  # drop header
         pl.col("Category") == "Human"
@@ -104,11 +106,9 @@ def extract_clinical_report(
 
     return ClinicalReport(
         df=(
-            reports
-            .group_by(
+            reports.group_by(
                 [c for c in reports.columns if c not in ["disease", "drug"]]
-            )
-            .agg(
+            ).agg(
                 pl.col("disease").unique().alias("diseases"),
                 pl.col("drug").unique().alias("drugs"),
             )

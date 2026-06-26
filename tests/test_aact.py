@@ -2,40 +2,48 @@ import polars as pl
 
 
 def _make_studies() -> pl.DataFrame:
-    return pl.DataFrame({
-        "nct_id": ["NCT0001"],
-        "overall_status": ["COMPLETED"],
-        "phase": ["PHASE2"],
-        "study_type": ["INTERVENTIONAL"],
-        "start_date": [None],
-        "why_stopped": [None],
-        "number_of_arms": [2],
-        "official_title": ["A Study"],
-    })
+    return pl.DataFrame(
+        {
+            "nct_id": ["NCT0001"],
+            "overall_status": ["COMPLETED"],
+            "phase": ["PHASE2"],
+            "study_type": ["INTERVENTIONAL"],
+            "start_date": [None],
+            "why_stopped": [None],
+            "number_of_arms": [2],
+            "official_title": ["A Study"],
+        }
+    )
 
 
 def _make_interventions() -> pl.DataFrame:
-    return pl.DataFrame({
-        "nct_id": ["NCT0001"],
-        "intervention_type": ["DRUG"],
-        "name": ["Aspirin"],
-    })
+    return pl.DataFrame(
+        {
+            "nct_id": ["NCT0001"],
+            "intervention_type": ["DRUG"],
+            "name": ["Aspirin"],
+        }
+    )
 
 
 def _make_conditions() -> pl.DataFrame:
-    return pl.DataFrame({
-        "nct_id": ["NCT0001"],
-        "downcase_name": ["headache"],
-    })
+    return pl.DataFrame(
+        {
+            "nct_id": ["NCT0001"],
+            "downcase_name": ["headache"],
+        }
+    )
 
 
 def test_detailed_descriptions_column_present():
     from clinical_mining.data_sources.aact import extract_clinical_report
 
-    detailed_descriptions = pl.DataFrame({
-        "nct_id": ["NCT0001"],
-        "description": ["A detailed protocol description."],
-    })
+    detailed_descriptions = pl.DataFrame(
+        {
+            "nct_id": ["NCT0001"],
+            "description": ["A detailed protocol description."],
+        }
+    )
 
     result = extract_clinical_report(
         studies=_make_studies(),
@@ -62,10 +70,12 @@ def test_no_detailed_descriptions_column_absent():
 def test_detailed_description_value_preserved():
     from clinical_mining.data_sources.aact import extract_clinical_report
 
-    detailed_descriptions = pl.DataFrame({
-        "nct_id": ["NCT0001"],
-        "description": ["Detailed protocol text."],
-    })
+    detailed_descriptions = pl.DataFrame(
+        {
+            "nct_id": ["NCT0001"],
+            "description": ["Detailed protocol text."],
+        }
+    )
 
     result = extract_clinical_report(
         studies=_make_studies(),
@@ -84,22 +94,47 @@ def test_replace_with_llm_indications():
         replace_with_llm_indications,
     )
 
-    _disease_struct = pl.Struct({
-        "name": pl.String, "severity": pl.String, "stage": pl.String,
-        "onset": pl.String, "etiology": pl.String, "evidence_quote": pl.String,
-    })
-    _drug_struct = pl.Struct({
-        "drug": pl.String, "route": pl.String, "formulation": pl.String,
-        "synonyms": pl.List(pl.String), "dosages": pl.List(pl.String),
-        "evidence_quote": pl.String,
-    })
+    _disease_struct = pl.Struct(
+        {
+            "name": pl.String,
+            "severity": pl.String,
+            "stage": pl.String,
+            "onset": pl.String,
+            "etiology": pl.String,
+            "evidence_quote": pl.String,
+        }
+    )
+    _drug_struct = pl.Struct(
+        {
+            "drug": pl.String,
+            "route": pl.String,
+            "formulation": pl.String,
+            "synonyms": pl.List(pl.String),
+            "dosages": pl.List(pl.String),
+            "evidence_quote": pl.String,
+        }
+    )
 
-    studies = pl.DataFrame({
-        "nct_id": ["NCT1", "NCT1", "NCT2", "NCT3", "NCT4"],
-        "diseaseFromSource": ["colorectal cancer", "pain", "diabetes", "dementia", "heart failure"],
-        "drugFromSource": ["acetaminophen", "acetaminophen", "metformin", "carbamazepine", "lisinopril"],
-        "trial_phase": ["PHASE2", "PHASE2", "PHASE3", "PHASE1", "PHASE4"],
-    })
+    studies = pl.DataFrame(
+        {
+            "nct_id": ["NCT1", "NCT1", "NCT2", "NCT3", "NCT4"],
+            "diseaseFromSource": [
+                "colorectal cancer",
+                "pain",
+                "diabetes",
+                "dementia",
+                "heart failure",
+            ],
+            "drugFromSource": [
+                "acetaminophen",
+                "acetaminophen",
+                "metformin",
+                "carbamazepine",
+                "lisinopril",
+            ],
+            "trial_phase": ["PHASE2", "PHASE2", "PHASE3", "PHASE1", "PHASE4"],
+        }
+    )
 
     def disease(name: str) -> dict:
         return {
@@ -110,7 +145,6 @@ def test_replace_with_llm_indications():
             "etiology": None,
             "evidence_quote": name,
         }
-
 
     def drug(name: str) -> dict:
         return {
@@ -146,7 +180,9 @@ def test_replace_with_llm_indications():
     result = replace_with_llm_indications(studies, extractions)
 
     # LLM-covered trial uses LLM indications only — "pain" row is gone
-    nct1_diseases = result.filter(pl.col("nct_id") == "NCT1")["diseaseFromSource"].to_list()
+    nct1_diseases = result.filter(pl.col("nct_id") == "NCT1")[
+        "diseaseFromSource"
+    ].to_list()
     assert nct1_diseases == ["metastatic colorectal cancer"], (
         "Expected LLM indication to replace original source indications entirely"
     )
@@ -175,12 +211,14 @@ def test_replace_with_llm_indications():
 def test_extract_clinical_report_with_sponsors():
     from clinical_mining.data_sources.aact import extract_clinical_report
 
-    sponsors = pl.DataFrame({
-        "nct_id": ["NCT0001", "NCT0001", "NCT0002"],
-        "agency_class": ["INDUSTRY", "NIH", "INDUSTRY"],
-        "lead_or_collaborator": ["lead", "collaborator", "lead"],
-        "name": ["Sponsor A", "Sponsor B", "Sponsor C"],
-    })
+    sponsors = pl.DataFrame(
+        {
+            "nct_id": ["NCT0001", "NCT0001", "NCT0002"],
+            "agency_class": ["INDUSTRY", "NIH", "INDUSTRY"],
+            "lead_or_collaborator": ["lead", "collaborator", "lead"],
+            "name": ["Sponsor A", "Sponsor B", "Sponsor C"],
+        }
+    )
 
     lead_sponsors = sponsors.filter(pl.col("lead_or_collaborator") == "lead")
 
@@ -205,7 +243,7 @@ def test_extract_clinical_report_with_sponsors():
     )
 
     assert "trialSponsor" in result.df.columns
-    trial_sponsor_nct0001 = result.df.filter(pl.col("id") == "nct0001")["trialSponsor"].to_list()[0]
+    trial_sponsor_nct0001 = result.df.filter(pl.col("id") == "nct0001")[
+        "trialSponsor"
+    ].to_list()[0]
     assert trial_sponsor_nct0001 == {"agencyClass": "INDUSTRY", "name": "Sponsor A"}
-
-    

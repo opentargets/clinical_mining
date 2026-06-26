@@ -9,10 +9,10 @@ def spark_session() -> SparkSession:
     if active is not None:
         active.stop()
     params = {
-        "spark.driver.memory":"10g",
-        "spark.driver.maxResultSize":"4g",
-        "spark.serializer":"org.apache.spark.serializer.KryoSerializer",
-        "spark.kryoserializer.buffer.max":"512m",
+        "spark.driver.memory": "10g",
+        "spark.driver.maxResultSize": "4g",
+        "spark.serializer": "org.apache.spark.serializer.KryoSerializer",
+        "spark.kryoserializer.buffer.max": "512m",
         "spark.sql.shuffle.partitions": "50",
         "spark.default.parallelism": "4",
         "spark.sql.adaptive.enabled": "true",
