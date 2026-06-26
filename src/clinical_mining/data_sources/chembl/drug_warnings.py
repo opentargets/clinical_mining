@@ -75,7 +75,6 @@ def extract_clinical_report(
             year=pl.col("warning_year"),
             countries=pl.col("warning_country").str.split(";"),
             source=pl.col("ref_type"),
-            hasExpertReview=pl.lit(True),
             url=pl.col("ref_url"),
         )
         .unique()

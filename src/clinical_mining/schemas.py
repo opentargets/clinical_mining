@@ -141,10 +141,6 @@ class ClinicalReportSchema(BaseModel):
     sideEffects: list[AssociatedDisease] | None = Field(
         default=None, description="The side effects associated with the report."
     )
-    hasExpertReview: bool = Field(
-        default=False,
-        description="Whether the report has been reviewed by an expert.",
-    )
 
 
 # + optional trial metadata fields with the `trial` prefix. E.g. trialDescription

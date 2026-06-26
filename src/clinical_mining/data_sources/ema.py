@@ -80,7 +80,6 @@ def extract_clinical_report(
             .str.split(";"),
             source=pl.lit("EMA Human Drugs"),
             url=pl.col("Medicine URL"),
-            hasExpertReview=pl.lit(False),
             type=pl.lit(ClinicalReportType.INDICATION.value),
             # TODO: Marketing date
         )

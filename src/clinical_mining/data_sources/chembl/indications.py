@@ -78,7 +78,6 @@ def extract_clinical_report(
                 )
                 .otherwise(pl.col("ref_url"))
             ),
-            hasExpertReview=pl.lit(True),
             source=pl.col("ref_type"),
             disease=pl.struct(
                 pl.col("efo_id").str.replace(":", "_").alias("diseaseId"),

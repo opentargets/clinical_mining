@@ -71,7 +71,6 @@ def extract_clinical_report(
         url=pl.concat_str(
             [pl.lit("https://ttd.idrblab.cn/data/drug/details/"), pl.col("ttd_id")]
         ),
-        hasExpertReview=pl.lit(True),
         phaseFromSource=pl.col("clinical_stage").str.to_lowercase(),
         drug=pl.struct(
             pl.col("drugFromSource").str.to_lowercase(),

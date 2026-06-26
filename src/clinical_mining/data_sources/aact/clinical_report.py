@@ -183,7 +183,6 @@ def extract_clinical_report(
                 [pl.lit("https://clinicaltrials.gov/study/"), pl.col("id")],
                 separator="",
             ),
-            hasExpertReview=pl.lit(False),
             origin=pl.lit(ClinicalReportOrigin.CLINICAL_TRIAL),
             phaseFromSource=pl.col("trial_phase"),
             disease=pl.struct(

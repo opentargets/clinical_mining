@@ -383,7 +383,6 @@ def extract_clinical_report(
                 pl.lit(None, dtype=pl.String).alias("diseaseId"),
                 pl.col("extracted_diseases").alias("diseaseFromSource"),
             ),
-            hasExpertReview=pl.lit(False),
             url=pl.lit(
                 "https://www.pmda.go.jp/english/review-services/reviews/approved-information/drugs/0001.html"
             ),
