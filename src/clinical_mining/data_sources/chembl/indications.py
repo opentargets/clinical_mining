@@ -61,7 +61,7 @@ def extract_clinical_report(
             .when(pl.col("ref_type").is_in(["FDA", "EMA"]))
             .then(pl.lit(ClinicalReportOrigin.REGULATORY))
             .otherwise(pl.lit(ClinicalReportOrigin.CURATED_RESOURCE))
-            .alias("type"),
+            .alias("origin"),
             pl.when(pl.col("ref_type") == "ClinicalTrials")
             .then(
                 pl.concat_str(

@@ -63,7 +63,7 @@ def extract_clinical_report(
         ner_extracted_indication.select(
             id=pl.col("EMA product number").str.to_lowercase(),
             phaseFromSource=pl.col("Medicine status").str.to_lowercase(),
-            type=pl.lit(ClinicalReportOrigin.REGULATORY),
+            origin=pl.lit(ClinicalReportOrigin.REGULATORY),
             drugFromSource=pl.coalesce(
                 "International non-proprietary name (INN) / common name",
                 "Active substance",

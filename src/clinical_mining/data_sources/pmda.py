@@ -371,7 +371,7 @@ def extract_clinical_report(
         )
         .select(
             phaseFromSource=pl.lit("approval"),
-            type=pl.lit(ClinicalReportOrigin.REGULATORY),
+            origin=pl.lit(ClinicalReportOrigin.REGULATORY),
             drug=pl.struct(
                 pl.col("active_ingredients")
                 .str.strip_chars()

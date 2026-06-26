@@ -78,7 +78,7 @@ class MappingStatus(str, Enum):
 
 
 class ClinicalReportOrigin(str, Enum):
-    """The type of the clinical record."""
+    """The origin that describes the nature of the clinical record."""
 
     CLINICAL_TRIAL = "CLINICAL_TRIAL"
     DRUG_LABEL = "DRUG_LABEL"
@@ -114,7 +114,7 @@ class ClinicalReportSchema(BaseModel):
     phaseFromSource: str | None = Field(
         default=None, description="The phase of the report at the source."
     )
-    type: ClinicalReportOrigin = Field(
+    origin: ClinicalReportOrigin = Field(
         description="The type from which the report originates."
     )
     year: int | None = Field(default=None, description="The year of the report.")

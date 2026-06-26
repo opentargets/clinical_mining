@@ -35,7 +35,7 @@ def extract_clinical_report(
             .str.to_lowercase()
             .alias("phaseFromSource"),
             #
-            type=pl.when(pl.col("ref_type").str == ClinicalSource.DailyMed.value)
+            origin=pl.when(pl.col("ref_type").str == ClinicalSource.DailyMed.value)
             .then(pl.lit(ClinicalReportOrigin.DRUG_LABEL.value))
             .when(
                 pl.col("ref_type").str.is_in(
