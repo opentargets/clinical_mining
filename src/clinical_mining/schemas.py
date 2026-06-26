@@ -124,6 +124,9 @@ class ClinicalReportSchema(BaseModel):
     origin: ClinicalReportOrigin = Field(
         description="The type from which the report originates."
     )
+    type: ClinicalReportType = Field(
+        description="The type of evidence the clinical report describes."
+    )
     year: int | None = Field(default=None, description="The year of the report.")
     countries: list[str] | None = Field(
         default=None, description="The countries where the report was conducted."
