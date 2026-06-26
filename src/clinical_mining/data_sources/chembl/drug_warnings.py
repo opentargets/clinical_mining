@@ -3,7 +3,11 @@
 import polars as pl
 
 from clinical_mining.dataset import ClinicalReport
-from clinical_mining.schemas import ClinicalReportOrigin, ClinicalSource
+from clinical_mining.schemas import (
+    ClinicalReportOrigin,
+    ClinicalReportType,
+    ClinicalSource,
+)
 
 
 def extract_clinical_report(
@@ -34,7 +38,7 @@ def extract_clinical_report(
             phaseFromSource=pl.col("warning_type")
             .str.to_lowercase()
             .alias("phaseFromSource"),
-            #
+            type=pl.lit(ClinicalReportType.SAFETY.value),
             origin=pl.when(pl.col("ref_type").str == ClinicalSource.DailyMed.value)
             .then(pl.lit(ClinicalReportOrigin.DRUG_LABEL.value))
             .when(

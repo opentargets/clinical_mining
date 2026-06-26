@@ -86,6 +86,13 @@ class ClinicalReportOrigin(str, Enum):
     CURATED_RESOURCE = "CURATED_RESOURCE"
 
 
+class ClinicalReportType(str, Enum):
+    """The type of evidence the clinical report describes."""
+
+    INDICATION = "INDICATION"
+    SAFETY = "SAFETY"
+
+
 class AssociatedDrug(BaseModel):
     drugFromSource: str | None = Field(
         default=None, description="The drug label used at the source."

@@ -7,6 +7,7 @@ import polars as pl
 from clinical_mining.dataset import ClinicalReport
 from clinical_mining.schemas import (
     ClinicalReportOrigin,
+    ClinicalReportType,
     ClinicalSource,
 )
 
@@ -177,6 +178,7 @@ def extract_clinical_report(
         )
         .with_columns(
             source=pl.lit(ClinicalSource.AACT.value),
+            type=pl.lit(ClinicalReportType.INDICATION.value),
             url=pl.concat_str(
                 [pl.lit("https://clinicaltrials.gov/study/"), pl.col("id")],
                 separator="",
