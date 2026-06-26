@@ -228,16 +228,10 @@ workflow:
           df: $chembl_indication_report
           expr: "source != 'ClinicalTrials'"
 
-      chembl_withdrawn:
-        function: clinical_mining.utils.polars_helpers.filter_df
-        parameters:
-          df: $chembl_drug_warning_report
-          expr: "phaseFromSource == 'withdrawn'"
-
       all_reports:
         function: clinical_mining.utils.polars_helpers.union_dfs
         parameters:
-          dfs: [$aact_report, $ttd_report, $ema_report, $pmda_report, $chembl_indication_report_filter, $chembl_withdrawn]
+          dfs: [$aact_report, $ttd_report, $ema_report, $pmda_report, $chembl_indication_report_filter, $chembl_drug_warning_report]
 
       output_clinical_report:
         function: clinical_mining.dataset.ClinicalReport.map_entities
