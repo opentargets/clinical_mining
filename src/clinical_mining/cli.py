@@ -3,12 +3,12 @@ from pathlib import Path
 from typing import Any
 
 import hydra
+import polars as pl
 from loguru import logger
 from omegaconf import DictConfig
-import polars as pl
 
-from clinical_mining.utils.pipeline import execute_step, normalise_steps
 from clinical_mining.utils.db import construct_db_uri, load_db_table
+from clinical_mining.utils.pipeline import execute_step, normalise_steps
 from clinical_mining.utils.spark_helpers import spark_session
 
 
@@ -82,6 +82,7 @@ def _run_transform(workflow_cfg: DictConfig, cfg: DictConfig) -> dict[str, Any]:
             logger.info(f"output {output_name} written to {output_dir}")
         elif isinstance(v, dict):
             import json
+
             out_path = output_dir / f"{output_name}.json"
             with out_path.open("w") as f:
                 json.dump(v, f, indent=2, default=str)
@@ -99,7 +100,9 @@ def main(cfg: DictConfig) -> dict[str, Any]:
     """Main function to run clinical mining workflows."""
     workflow = cfg.get("workflow")
     if not workflow:
-        logger.info("No workflow defined. Add a recipe to activate a workflow (e.g. +recipe=<name>).")
+        logger.info(
+            "No workflow defined. Add a recipe to activate a workflow (e.g. +recipe=<name>)."
+        )
         return {}
 
     for name, section in workflow.items():

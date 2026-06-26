@@ -70,7 +70,9 @@ def test_fetch_publications_success():
     handle = _mock_entrez_read(TWO_ARTICLES)
     with (
         patch("clinical_mining.data_sources.pubmed.Entrez.efetch", return_value=handle),
-        patch("clinical_mining.data_sources.pubmed.Entrez.read", return_value=TWO_ARTICLES),
+        patch(
+            "clinical_mining.data_sources.pubmed.Entrez.read", return_value=TWO_ARTICLES
+        ),
     ):
         result = fetch_publications([12345678, 99999999])
 
@@ -94,7 +96,9 @@ def test_fetch_publications_missing_abstract_becomes_empty_string():
     handle = _mock_entrez_read(no_abstract)
     with (
         patch("clinical_mining.data_sources.pubmed.Entrez.efetch", return_value=handle),
-        patch("clinical_mining.data_sources.pubmed.Entrez.read", return_value=no_abstract),
+        patch(
+            "clinical_mining.data_sources.pubmed.Entrez.read", return_value=no_abstract
+        ),
     ):
         result = fetch_publications([11111111])
 
@@ -109,7 +113,10 @@ def test_fetch_publications_retries_on_incomplete_read(capsys):
     efetch = MagicMock(side_effect=[IncompleteRead(b""), handle])
     with (
         patch("clinical_mining.data_sources.pubmed.Entrez.efetch", efetch),
-        patch("clinical_mining.data_sources.pubmed.Entrez.read", return_value=SINGLE_ARTICLE),
+        patch(
+            "clinical_mining.data_sources.pubmed.Entrez.read",
+            return_value=SINGLE_ARTICLE,
+        ),
     ):
         result = fetch_publications([12345678], max_retries=2)
 
@@ -132,7 +139,9 @@ def test_build_publications_map_basic():
         "12345678": {"title": "Paper A", "abstractText": "Abstract A"},
         "99999999": {"title": "Paper B", "abstractText": "Abstract B"},
     }
-    with patch("clinical_mining.data_sources.pubmed.fetch_publications", return_value=pub_data):
+    with patch(
+        "clinical_mining.data_sources.pubmed.fetch_publications", return_value=pub_data
+    ):
         result = build_publications_map(records, max_pubs=2)
 
     assert len(result["NCT00000001"]) == 2
@@ -143,8 +152,12 @@ def test_build_publications_map_basic():
 
 def test_build_publications_map_respects_max_pubs():
     records = [{"id": "NCT00000001", "trialLiterature": [1, 2, 3, 4, 5]}]
-    pub_data = {str(i): {"title": f"Paper {i}", "abstractText": f"Abs {i}"} for i in range(1, 6)}
-    with patch("clinical_mining.data_sources.pubmed.fetch_publications", return_value=pub_data):
+    pub_data = {
+        str(i): {"title": f"Paper {i}", "abstractText": f"Abs {i}"} for i in range(1, 6)
+    }
+    with patch(
+        "clinical_mining.data_sources.pubmed.fetch_publications", return_value=pub_data
+    ):
         result = build_publications_map(records, max_pubs=3)
 
     assert len(result["NCT00000001"]) == 3
@@ -155,7 +168,9 @@ def test_build_publications_map_deduplicates_pmids():
         {"id": "NCT00000001", "trialLiterature": [111, 222]},
         {"id": "NCT00000002", "trialLiterature": [222, 333]},
     ]
-    with patch("clinical_mining.data_sources.pubmed.fetch_publications", return_value={}) as mock_fetch:
+    with patch(
+        "clinical_mining.data_sources.pubmed.fetch_publications", return_value={}
+    ) as mock_fetch:
         build_publications_map(records, max_pubs=3)
 
     assert mock_fetch.call_count == 1

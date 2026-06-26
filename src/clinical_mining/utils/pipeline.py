@@ -1,11 +1,10 @@
 """Core pipeline execution logic."""
 
 import importlib
-
 from typing import Any, Callable
 
-from omegaconf import DictConfig, ListConfig
 import polars as pl
+from omegaconf import DictConfig, ListConfig
 
 
 def _params_reference_key(params: dict[str, Any], key: str) -> bool:
@@ -49,7 +48,9 @@ def _get_callable(function_path: str) -> Callable[..., Any]:
         raise ImportError(f"Could not import function '{function_path}': {e}")
 
 
-def _resolve_params(params: dict[str, Any], data_store: dict[str, Any]) -> dict[str, Any]:
+def _resolve_params(
+    params: dict[str, Any], data_store: dict[str, Any]
+) -> dict[str, Any]:
     """Resolves parameter values from the data_store."""
     resolved_params = {}
     for name, value in params.items():

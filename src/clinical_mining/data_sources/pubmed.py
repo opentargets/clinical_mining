@@ -1,7 +1,7 @@
 """PubMed publication fetching utilities using Entrez API."""
 
-import time
 import sys
+import time
 from http.client import IncompleteRead
 
 from Bio import Entrez
@@ -13,7 +13,9 @@ def _iter_batches(items: list[int | str], batch_size: int) -> list[list[int | st
     return [items[i : i + batch_size] for i in range(0, len(items), batch_size)]
 
 
-def fetch_publications(pmids: list[int | str], batch_size: int = 1_000, max_retries: int = 2) -> dict[str, dict]:
+def fetch_publications(
+    pmids: list[int | str], batch_size: int = 1_000, max_retries: int = 2
+) -> dict[str, dict]:
     """Fetch title and abstractText the Entrez API for a list of PubMed IDs."""
     if not pmids:
         return {}
@@ -38,7 +40,9 @@ def fetch_publications(pmids: list[int | str], batch_size: int = 1_000, max_retr
                     pmid = str(citation["PMID"])
                     article_data = citation.get("Article", {})
                     title = str(article_data.get("ArticleTitle", ""))
-                    abstract_chunks = article_data.get("Abstract", {}).get("AbstractText", [])
+                    abstract_chunks = article_data.get("Abstract", {}).get(
+                        "AbstractText", []
+                    )
                     abstract = " ".join(str(chunk) for chunk in abstract_chunks)
                     publications[pmid] = {
                         "title": title,
@@ -98,7 +102,9 @@ def build_publications_map(
     selected_pmids: set[str] = set()
     for record in records:
         nct_id = record["id"]
-        trial_pmids = [str(pmid) for pmid in (record.get("trialLiterature") or [])[:max_pubs]]
+        trial_pmids = [
+            str(pmid) for pmid in (record.get("trialLiterature") or [])[:max_pubs]
+        ]
         if trial_pmids:
             selected_pmids_by_trial[nct_id] = trial_pmids
             selected_pmids.update(trial_pmids)
