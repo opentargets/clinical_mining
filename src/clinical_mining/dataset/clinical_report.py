@@ -1,14 +1,14 @@
 import polars as pl
+from pyspark.sql import DataFrame, SparkSession
 
+from clinical_mining.dataset.clinical_indication import CATEGORY_RANKS_STR
 from clinical_mining.schemas import (
-    validate_schema,
     ClinicalReportSchema,
     ClinicalStageCategory,
     snake_to_camel,
+    validate_schema,
 )
-from clinical_mining.dataset.clinical_indication import CATEGORY_RANKS_STR
 from clinical_mining.utils.mapping import map_entities
-from pyspark.sql import DataFrame, SparkSession
 
 # Clinical status harmonization constants
 PHASE_TO_CATEGORY_MAP = {
@@ -95,7 +95,9 @@ PHASE_TO_CATEGORY_MAP = {
 APPROVAL_SOURCES = {"ATC", "EMA", "FDA", "DailyMed", "PMDA"}
 
 
-def map_phase_to_category(phase: str | None, source: str, overall_status: str | None) -> ClinicalStageCategory:
+def map_phase_to_category(
+    phase: str | None, source: str, overall_status: str | None
+) -> ClinicalStageCategory:
     """Map original phase value to standardised category.
 
     Args:
@@ -136,14 +138,14 @@ class ClinicalReport:
         struct_expr = pl.struct(["phaseFromSource", "source"])
         if "trialOverallStatus" in df.columns:
             struct_expr = pl.struct(["phaseFromSource", "source", "trialOverallStatus"])
-        
+
         df = df.with_columns(
             # Assign clinical stage
             clinicalStage=struct_expr.map_elements(
                 lambda row: map_phase_to_category(
-                    row["phaseFromSource"], 
-                    row["source"], 
-                    row.get("trialOverallStatus")  # Safe get for optional column
+                    row["phaseFromSource"],
+                    row["source"],
+                    row.get("trialOverallStatus"),  # Safe get for optional column
                 ),
                 return_dtype=pl.String,
             ),

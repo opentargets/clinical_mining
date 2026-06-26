@@ -1,6 +1,6 @@
 import polars as pl
 
-from clinical_mining.schemas import validate_schema, ClinicalReportExtractionSchema
+from clinical_mining.schemas import ClinicalReportExtractionSchema, validate_schema
 
 
 class ClinicalReportExtraction:

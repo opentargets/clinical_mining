@@ -2,8 +2,8 @@
 
 import polars as pl
 
-from clinical_mining.schemas import ClinicalReportType
 from clinical_mining.dataset import ClinicalReport
+from clinical_mining.schemas import ClinicalReportType
 
 
 def extract_clinical_report(
@@ -30,7 +30,9 @@ def extract_clinical_report(
                 # One reference can report multiple withdrawals
                 pl.col("ref_id"),
                 pl.col("chembl_id"),
-            ).chash.sha2_256().alias("id"),
+            )
+            .chash.sha2_256()
+            .alias("id"),
             pl.col("warning_type").str.to_lowercase().alias("phaseFromSource"),
             pl.lit(ClinicalReportType.CURATED_RESOURCE).alias("type"),
             pl.struct(

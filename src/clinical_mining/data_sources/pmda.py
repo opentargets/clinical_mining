@@ -1,18 +1,17 @@
+import re
 from dataclasses import dataclass
 from io import BytesIO
-from loguru import logger
+
 import pdfplumber
 import polars as pl
-import re
-
+import polars_hash as plh
+from loguru import logger
 from ontoma.ner.disease import extract_disease_entities
-from clinical_mining.utils.polars_helpers import convert_polars_to_spark
+from pyspark.sql import SparkSession
 
 from clinical_mining.dataset import ClinicalReport
 from clinical_mining.schemas import ClinicalReportType
-import polars_hash as plh
-from pyspark.sql import SparkSession
-
+from clinical_mining.utils.polars_helpers import convert_polars_to_spark
 
 # ============================================================================
 # CONFIGURATION
@@ -279,7 +278,7 @@ def parse_pmda_approvals(pmda: str | BytesIO | pdfplumber.pdf.PDF) -> pl.DataFra
 
     all_records = []
     last_structure: ColumnStructure | None = None
-    
+
     # Work-around for passing pdfplumber.pdf.PDF object directly for an OT release
     if isinstance(pmda, pdfplumber.pdf.PDF):
         pdf = pmda

@@ -1,8 +1,8 @@
+from enum import Enum
 from typing import Literal
 
 import polars as pl
 from pydantic import BaseModel, ConfigDict, Field
-from enum import Enum
 
 
 def validate_schema(df: pl.DataFrame, model: type[BaseModel]) -> pl.DataFrame:
