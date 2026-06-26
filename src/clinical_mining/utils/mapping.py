@@ -1,11 +1,11 @@
 from datetime import datetime
 
+import polars as pl
+import pyspark.sql.functions as f
 from loguru import logger
 from ontoma import OnToma, OpenTargetsDisease, OpenTargetsDrug
 from ontoma.ner.drug import extract_drug_entities
-import polars as pl
 from pyspark.sql import DataFrame, SparkSession
-import pyspark.sql.functions as f
 
 from clinical_mining.utils.polars_helpers import convert_polars_to_spark
 

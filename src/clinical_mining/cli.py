@@ -3,12 +3,12 @@ from pathlib import Path
 from typing import Any
 
 import hydra
+import polars as pl
 from loguru import logger
 from omegaconf import DictConfig
-import polars as pl
 
-from clinical_mining.utils.pipeline import execute_step, normalise_steps
 from clinical_mining.utils.db import construct_db_uri, load_db_table
+from clinical_mining.utils.pipeline import execute_step, normalise_steps
 from clinical_mining.utils.spark_helpers import spark_session
 
 

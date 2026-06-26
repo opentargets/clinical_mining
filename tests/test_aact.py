@@ -80,7 +80,9 @@ def test_detailed_description_value_preserved():
 
 def test_replace_with_llm_indications():
     """Test that LLM indications replace source indications for LLM-covered trials."""
-    from clinical_mining.data_sources.aact.clinical_report import replace_with_llm_indications
+    from clinical_mining.data_sources.aact.clinical_report import (
+        replace_with_llm_indications,
+    )
 
     _disease_struct = pl.Struct({
         "name": pl.String, "severity": pl.String, "stage": pl.String,
@@ -99,23 +101,39 @@ def test_replace_with_llm_indications():
         "trial_phase": ["PHASE2", "PHASE2", "PHASE3", "PHASE1", "PHASE4"],
     })
 
-    _disease = lambda name: {"name": name, "severity": None, "stage": None,
-                             "onset": None, "etiology": None, "evidence_quote": name}
-    _drug = lambda name: {"drug": name, "route": None, "formulation": None,
-                          "synonyms": None, "dosages": None, "evidence_quote": name}
+    def disease(name: str) -> dict:
+        return {
+            "name": name,
+            "severity": None,
+            "stage": None,
+            "onset": None,
+            "etiology": None,
+            "evidence_quote": name,
+        }
+
+
+    def drug(name: str) -> dict:
+        return {
+            "drug": name,
+            "route": None,
+            "formulation": None,
+            "synonyms": None,
+            "dosages": None,
+            "evidence_quote": name,
+        }
 
     extractions = pl.DataFrame(
         {
             "id": ["NCT1", "NCT3", "nct4"],
             "primary_indications": [
-                [_disease("metastatic colorectal cancer")],
+                [disease("metastatic colorectal cancer")],
                 [],
-                [_disease("congestive heart failure")],
+                [disease("congestive heart failure")],
             ],
             "investigated_drugs": [
-                [_drug("acetaminophen")],
-                [_drug("carbamazepine")],
-                [_drug("lisinopril")],
+                [drug("acetaminophen")],
+                [drug("carbamazepine")],
+                [drug("lisinopril")],
             ],
         },
         schema={

@@ -1,13 +1,13 @@
-import polars as pl
 from io import BytesIO
 
-from ontoma.ner.disease import extract_disease_entities
-
-from clinical_mining.utils.polars_helpers import convert_polars_to_spark
-from clinical_mining.schemas import ClinicalReportType
-from clinical_mining.dataset import ClinicalReport
+import polars as pl
 from loguru import logger
+from ontoma.ner.disease import extract_disease_entities
 from pyspark.sql import SparkSession
+
+from clinical_mining.dataset import ClinicalReport
+from clinical_mining.schemas import ClinicalReportType
+from clinical_mining.utils.polars_helpers import convert_polars_to_spark
 
 
 def extract_clinical_report(

@@ -1,7 +1,7 @@
 """PubMed publication fetching utilities using Entrez API."""
 
-import time
 import sys
+import time
 from http.client import IncompleteRead
 
 from Bio import Entrez

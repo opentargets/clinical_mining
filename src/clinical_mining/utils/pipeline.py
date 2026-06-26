@@ -1,11 +1,10 @@
 """Core pipeline execution logic."""
 
 import importlib
-
 from typing import Any, Callable
 
-from omegaconf import DictConfig, ListConfig
 import polars as pl
+from omegaconf import DictConfig, ListConfig
 
 
 def _params_reference_key(params: dict[str, Any], key: str) -> bool:

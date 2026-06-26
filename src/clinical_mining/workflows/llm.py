@@ -20,7 +20,7 @@ from pathlib import Path
 
 import polars as pl
 from loguru import logger
-from openai import AsyncOpenAI, APIStatusError
+from openai import APIStatusError, AsyncOpenAI
 from pydantic import BaseModel
 
 logging.getLogger("openai").setLevel(logging.WARNING)

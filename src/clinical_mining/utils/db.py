@@ -1,5 +1,5 @@
-from loguru import logger
 import polars as pl
+from loguru import logger
 
 # Optional Oracle dependency handling
 try:

@@ -2,8 +2,8 @@
 
 import polars as pl
 
-from clinical_mining.schemas import ClinicalReportType
 from clinical_mining.dataset import ClinicalReport
+from clinical_mining.schemas import ClinicalReportType
 
 
 def extract_clinical_report(

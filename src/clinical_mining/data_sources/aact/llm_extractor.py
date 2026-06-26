@@ -4,18 +4,18 @@ from __future__ import annotations
 
 import json
 
+import fsspec
 import polars as pl
 from loguru import logger
-import fsspec
 
 from clinical_mining.data_sources.pubmed import build_publications_map
 from clinical_mining.dataset import ClinicalReportExtraction
-from clinical_mining.workflows.llm import _extractions_to_df
 from clinical_mining.schemas import (
     ClinicalReportExtractionSchema,
-    ExtractedDrug,
     ExtractedDisease,
+    ExtractedDrug,
 )
+from clinical_mining.workflows.llm import _extractions_to_df
 
 
 def filter_by_id(report: pl.DataFrame, id_value: str | None) -> pl.DataFrame:

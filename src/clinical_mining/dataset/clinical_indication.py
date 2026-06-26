@@ -2,10 +2,10 @@ import polars as pl
 import polars_hash as plh
 
 from clinical_mining.schemas import (
-    validate_schema,
     ClinicalIndicationSchema,
     ClinicalReportSchema,
     ClinicalStageCategory,
+    validate_schema,
 )
 
 # Category ranking for Maximum Clinical Development Status

@@ -1,7 +1,9 @@
 """Utils to transform AACT database to drug/indication relationships."""
 
-import polars as pl
 from typing import Any
+
+import polars as pl
+
 from clinical_mining.dataset import ClinicalReport
 from clinical_mining.schemas import ClinicalReportType
 
@@ -114,9 +116,6 @@ def extract_clinical_report(
     
     Returns:
         ClinicalReport with desired extra annotations from other tables.
-        
-    Raises:
-        ValueError: If missing columns for struct.
     """
     STUDY_TYPES = ["INTERVENTIONAL", "OBSERVATIONAL", "EXPANDED_ACCESS"]
     interventions = process_interventions(interventions)

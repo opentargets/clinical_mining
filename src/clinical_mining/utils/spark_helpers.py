@@ -1,6 +1,6 @@
-from pyspark.sql import SparkSession
 import sparknlp
 from ontoma.ner._pipelines import get_device
+from pyspark.sql import SparkSession
 
 
 def spark_session() -> SparkSession:

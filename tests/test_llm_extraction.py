@@ -1,15 +1,18 @@
 import json
 
+import polars as pl
 import pytest
 from pydantic import ValidationError
 
-from clinical_mining.schemas import (
-    ClinicalReportExtractionSchema as ClinicalReportExtraction,
-    ExtractedDrug,
-    ExtractedDisease,
-)
 from clinical_mining.data_sources.aact.llm_extractor import (
     _parse_single_record,
+)
+from clinical_mining.schemas import (
+    ClinicalReportExtractionSchema as ClinicalReportExtraction,
+)
+from clinical_mining.schemas import (
+    ExtractedDisease,
+    ExtractedDrug,
 )
 
 
@@ -252,12 +255,6 @@ def test_clinical_report_extraction_from_json():
     assert extraction.drug_intent == "therapeutic"
     assert extraction.primary_indications[0].name == "headache"
     assert extraction.investigated_drugs[0].drug == "aspirin"
-
-
-import polars as pl
-import tempfile
-import os
-from pathlib import Path
 
 
 def _make_sample_parquet(path: str, n: int = 20) -> pl.DataFrame:
@@ -701,6 +698,7 @@ def test_has_unmatched_disease_true_when_no_label_overlap():
 
 def test_search_drug_disease_plausibility_returns_bool():
     from unittest.mock import MagicMock, patch
+
     from scripts.validation_report import search_drug_disease_plausibility
 
     with patch("scripts.validation_report.httpx") as mock_httpx:
