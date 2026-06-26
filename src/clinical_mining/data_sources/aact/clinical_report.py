@@ -5,7 +5,7 @@ from typing import Any
 import polars as pl
 
 from clinical_mining.dataset import ClinicalReport
-from clinical_mining.schemas import ClinicalReportType, ClinicalSource
+from clinical_mining.schemas import ClinicalReportOrigin, ClinicalSource
 
 
 def process_interventions(interventions: pl.DataFrame) -> pl.DataFrame:
@@ -179,7 +179,7 @@ def extract_clinical_report(
                 separator="",
             ),
             hasExpertReview=pl.lit(False),
-            type=pl.lit(ClinicalReportType.CLINICAL_TRIAL),
+            type=pl.lit(ClinicalReportOrigin.CLINICAL_TRIAL),
             phaseFromSource=pl.col("trial_phase"),
             disease=pl.struct(
                 pl.lit(None, dtype=pl.String).alias("diseaseId"),

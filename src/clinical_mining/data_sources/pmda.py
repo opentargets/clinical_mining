@@ -10,7 +10,7 @@ from ontoma.ner.disease import extract_disease_entities
 from pyspark.sql import SparkSession
 
 from clinical_mining.dataset import ClinicalReport
-from clinical_mining.schemas import ClinicalReportType
+from clinical_mining.schemas import ClinicalReportOrigin
 from clinical_mining.utils.polars_helpers import convert_polars_to_spark
 
 # ============================================================================
@@ -371,7 +371,7 @@ def extract_clinical_report(
         )
         .select(
             phaseFromSource=pl.lit("approval"),
-            type=pl.lit(ClinicalReportType.REGULATORY),
+            type=pl.lit(ClinicalReportOrigin.REGULATORY),
             drug=pl.struct(
                 pl.col("active_ingredients")
                 .str.strip_chars()

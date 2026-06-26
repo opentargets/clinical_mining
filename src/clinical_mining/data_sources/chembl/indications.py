@@ -4,7 +4,7 @@ import polars as pl
 
 from clinical_mining.dataset import ClinicalReport
 from clinical_mining.dataset.clinical_report import APPROVAL_SOURCES
-from clinical_mining.schemas import ClinicalReportType, ClinicalStageCategory
+from clinical_mining.schemas import ClinicalReportOrigin, ClinicalStageCategory
 
 
 def extract_clinical_report(
@@ -55,12 +55,12 @@ def extract_clinical_report(
             )  # TODO: report to ChEMBL - ClinicalTrials phase won't be accurate
             .alias("phaseFromSource"),
             pl.when(pl.col("ref_type") == "ClinicalTrials")
-            .then(pl.lit(ClinicalReportType.CLINICAL_TRIAL))
+            .then(pl.lit(ClinicalReportOrigin.CLINICAL_TRIAL))
             .when(pl.col("ref_type") == "DailyMed")
-            .then(pl.lit(ClinicalReportType.DRUG_LABEL))
+            .then(pl.lit(ClinicalReportOrigin.DRUG_LABEL))
             .when(pl.col("ref_type").is_in(["FDA", "EMA"]))
-            .then(pl.lit(ClinicalReportType.REGULATORY))
-            .otherwise(pl.lit(ClinicalReportType.CURATED_RESOURCE))
+            .then(pl.lit(ClinicalReportOrigin.REGULATORY))
+            .otherwise(pl.lit(ClinicalReportOrigin.CURATED_RESOURCE))
             .alias("type"),
             pl.when(pl.col("ref_type") == "ClinicalTrials")
             .then(

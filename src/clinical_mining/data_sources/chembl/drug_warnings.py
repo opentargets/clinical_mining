@@ -3,7 +3,7 @@
 import polars as pl
 
 from clinical_mining.dataset import ClinicalReport
-from clinical_mining.schemas import ClinicalReportType
+from clinical_mining.schemas import ClinicalReportOrigin, ClinicalSource
 
 
 def extract_clinical_report(
@@ -30,15 +30,32 @@ def extract_clinical_report(
                 # One reference can report multiple withdrawals
                 pl.col("ref_id"),
                 pl.col("chembl_id"),
+            ).chash.sha2_256(),
+            phaseFromSource=pl.col("warning_type")
+            .str.to_lowercase()
+            .alias("phaseFromSource"),
+            #
+            type=pl.when(pl.col("ref_type").str == ClinicalSource.DailyMed.value)
+            .then(pl.lit(ClinicalReportOrigin.DRUG_LABEL.value))
+            .when(
+                pl.col("ref_type").str.is_in(
+                    [ClinicalSource.FDA.value, ClinicalSource.EMA.value]
+                )
             )
-            .chash.sha2_256()
-            .alias("id"),
-            pl.col("warning_type").str.to_lowercase().alias("phaseFromSource"),
-            pl.lit(ClinicalReportType.CURATED_RESOURCE).alias("type"),
-            pl.struct(
-                pl.coalesce(
-                    pl.col("efo_id"),
-                    pl.col("efo_id_for_warning_class"),
+            .then(pl.lit(ClinicalReportOrigin.REGULATORY.value))
+            .otherwise(pl.lit(ClinicalReportOrigin.OTHER.value)),
+            sideEffect=(
+                pl.struct(
+                    pl.coalesce(
+                        pl.col("efo_id"),
+                        pl.col("efo_id_for_warning_class"),
+                    )
+                    .str.replace(":", "_")
+                    .alias("diseaseId"),
+                    pl.coalesce(
+                        pl.col("efo_term"),
+                        pl.col("warning_class"),
+                    ).alias("diseaseFromSource"),
                 )
                 .str.replace(":", "_")
                 .alias("diseaseId"),
@@ -46,16 +63,16 @@ def extract_clinical_report(
                     pl.col("efo_term"),
                     pl.col("warning_class"),
                 ).alias("diseaseFromSource"),
-            ).alias("sideEffect"),
-            pl.struct(
+            ),
+            drug=pl.struct(
                 pl.col("pref_name").alias("drugFromSource"),
                 pl.col("chembl_id").alias("drugId"),
-            ).alias("drug"),
-            pl.col("warning_year").alias("year"),
-            pl.col("warning_country").str.split(";").alias("countries"),
-            pl.col("ref_type").alias("source"),
-            pl.lit(True).alias("hasExpertReview"),
-            pl.col("ref_url").alias("url"),
+            ),
+            year=pl.col("warning_year"),
+            countries=pl.col("warning_country").str.split(";"),
+            source=pl.col("ref_type"),
+            hasExpertReview=pl.lit(True),
+            url=pl.col("ref_url"),
         )
         .unique()
     )
