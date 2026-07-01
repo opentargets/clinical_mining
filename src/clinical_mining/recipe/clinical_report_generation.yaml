@@ -160,6 +160,12 @@ workflow:
         parameters:
           df: $sponsors
           expr: "lead_or_collaborator == 'lead'"
+
+      study_references:
+        function: clinical_mining.utils.polars_helpers.filter_df
+        parameters:
+          df: $study_references
+          expr: "reference_type != 'BACKGROUND'"
       
       defailed_descriptions_rename:
         function: clinical_mining.utils.polars_helpers.rename_columns
