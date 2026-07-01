@@ -4,6 +4,42 @@ from typing import Literal
 import polars as pl
 from pydantic import BaseModel, ConfigDict, Field
 
+OutcomeCategory =  Literal[
+    "positive",
+    "positive_partial",
+    "negative",
+    "negative_with_signal",
+    "mixed",
+    "safety_failure",
+    "inconclusive",
+]
+
+_OUTCOME_DESCRIPTION = (
+    "Classify the trial outcome for this drug-condition pair into ONE of:\n"
+    "- 'positive': primary endpoint met; intervention shown effective.\n"
+    "- 'positive_partial': primary endpoint partially met.\n"
+    "- 'mixed': some endpoints met, others not; or subgroups diverge.\n"
+    "- 'negative': primary endpoint failed; intervention not shown effective.\n"
+    "- 'negative_with_signal': primary endpoint failed but with some positive signals.\n"
+    "- 'safety_failure': trial stopped or failed due to adverse events or toxicity.\n"
+    "- 'inconclusive': insufficient data, results not reported, or ongoing.\n"
+    "- 'not_applicable': drug_condition_mentioned is False.\n"
+    "If both safety and efficacy failed, prefer 'safety_failure' over 'negative'.\n"
+    "If the abstract reports no results at all, use 'inconclusive'."
+)
+
+_CONFIDENCE_DESCRIPTION = (
+    "Confidence in the outcome_category, between 0.0 and 1.0:\n"
+    "- 0.95+: outcome explicitly stated (e.g. 'met the primary endpoint').\n"
+    "- 0.7-0.9: outcome strongly implied but not explicitly stated.\n"
+    "- Below 0.7: ambiguous or conflicting signals. Be honest.\n"
+    "Set to -1.0 if drug_condition_mentioned is False."
+)
+
+
+
+
+
 
 def validate_schema(df: pl.DataFrame, model: type[BaseModel]) -> pl.DataFrame:
     """Validates that all mandatory schema fields are present. Resulting DataFrame is reordered to show core fields first."""
@@ -406,5 +442,270 @@ class ClinicalReportExtractionSchema(BaseModel):
             "A single sentence describing the outcome or result of the clinical trial "
             "(e.g. whether the intervention was effective or safe), if explicitly stated "
             "in the trial data. Do not describe the study design, purpose, or objectives."
+        ),
+    )
+
+class Therapy(BaseModel):
+    """A single therapy (drug/intervention) referenced by an outcome."""
+
+    model_config = ConfigDict(validate_by_name=True, alias_generator=str.lower)
+
+    name: str = Field(
+        ...,
+        description=(
+            "Core INN name of the drug/intervention only. No route, formulation, "
+            "or dose. E.g. 'metformin', not 'oral metformin tablet'."
+        ),
+    )
+    id: str = Field(
+        ...,
+        description=(
+            "Short identifier for this therapy, unique within this trial's "
+            "extraction (e.g. 'A', 'B', 'C'). The SAME therapy must reuse the "
+            "SAME id across every outcome in this trial where it appears — "
+            "this is how outcomes referencing the same drug are linked."
+        ),
+    )
+
+
+class Condition(BaseModel):
+    """A single condition referenced by an outcome."""
+
+    model_config = ConfigDict(validate_by_name=True, alias_generator=str.lower)
+
+    name: str = Field(
+        ...,
+        description=(
+            "Most specific disease name explicitly stated in the abstracts. "
+            "No stage, severity, or modifiers. E.g. 'non-Hodgkin lymphoma', "
+            "not 'lymphoma'."
+        ),
+    )
+    id: str = Field(
+        ...,
+        description=(
+            "Short identifier for this condition, unique within this trial's "
+            "extraction (e.g. '1', '2'). The SAME condition must reuse the "
+            "SAME id across every outcome in this trial where it appears."
+        ),
+    )
+
+# class InventoryItem(BaseModel):
+#     """One drug or condition mentioned anywhere in the trial's abstracts,
+#     with an explicit judgment on whether it has reportable clinical data."""
+
+#     model_config = ConfigDict(validate_by_name=True, alias_generator=str.lower)
+
+#     entity_type: Literal["therapy", "condition"]
+#     name: str = Field(..., description="As worded in the abstract(s).")
+#     has_clinical_data: bool = Field(
+#         ...,
+#         description=(
+#             "True only if at least one abstract reports patient-level clinical "
+#             "efficacy or safety data specific to this entity (a result describing "
+#             "patient response, survival, improvement, adverse events, or other "
+#             "clinical outcome) — not merely that the entity was mentioned, "
+#             "enrolled, or used in screening/run-in."
+#         ),
+#     )
+#     reasoning: str = Field(
+#         ..., description="One line justifying has_clinical_data."
+#     )
+
+
+# class StructuredOutcome(BaseModel):
+#     """One (therapies, conditions) combination identified for this trial,
+#     with no conclusion yet — that is determined in a later step."""
+
+#     model_config = ConfigDict(validate_by_name=True, alias_generator=str.lower)
+
+#     outcome_index: int = Field(
+#         ..., description="0-based index, unique within this trial's outcomes list, no gaps or repeats."
+#     )
+#     therapies: list[Therapy] = Field(
+#         ...,
+#         description=(
+#             "All therapies that are part of the regimen this outcome applies to — "
+#             "including a background/standard-of-care/add-on-to drug if the "
+#             "abstracts report the result as the COMBINED effect of that regimen "
+#             "(e.g. 'a as an add-on to b' results in "
+#             "therapies=[a, b], since the regimen evaluated "
+#             "together is the combination, not just the newly added agent). A "
+#             "combination regimen belongs in ONE outcome with multiple therapies. "
+#             "Therapies tested as SEPARATE arms with results reported separately "
+#             "(e.g. drug A vs. drug B vs. placebo, each reported independently) "
+#             "must be split into SEPARATE outcomes — do not combine unrelated arms "
+#             "into one outcome just because they share a condition. Exclude only "
+#             "drugs that are not part of the evaluated regimen at all."
+#         ),
+#     )
+#     conditions: list[Condition] = Field(
+#         ...,
+#         description=(
+#             "All conditions this outcome applies to."
+#         ),
+#     )
+#     reasoning: str = Field(
+#         ...,
+#         description=(
+#             "One or two sentences: why these therapies are grouped/split this "
+#             "way, and why these conditions are grouped/split this way, citing "
+#             "how results were reported in the abstract(s)."
+#         ),
+#     )
+
+
+# class TrialStructuring(BaseModel):
+#     """Stage A output: inventory and structured (therapies, conditions)
+#     outcomes for a trial, with no conclusions yet."""
+
+#     model_config = ConfigDict(validate_by_name=True, alias_generator=str.lower)
+
+#     id: str = Field(..., description="Clinical trial identifier (NCT ID).")
+#     inventory: list[InventoryItem] = Field(
+#         ...,
+#         description="Every distinct drug/intervention and condition/subgroup mentioned anywhere in the abstracts.",
+#     )
+#     outcomes: list[StructuredOutcome] = Field(
+#         ...,
+#         description=(
+#             "One entry per distinct therapy-combination/condition-set tested in "
+#             "this trial. Two outcomes must never share an identical "
+#             "(therapies, conditions) combination. Return an empty list only if "
+#             "no outcome can be identified."
+#         ),
+#     )
+
+
+# class ClassifiedOutcome(BaseModel):
+#     """The conclusion, confidence, and evidence for one outcome already
+#     identified during structuring."""
+
+#     model_config = ConfigDict(validate_by_name=True, alias_generator=str.lower)
+
+#     outcome_index: int = Field(
+#         ..., description="Must match the outcome_index given for this outcome in the structuring step."
+#     )
+#     conclusion: Literal[
+#         "positive",
+#         "positive_partial",
+#         "negative",
+#         "negative_with_signal",
+#         "mixed",
+#         "safety_failure",
+#         "inconclusive",
+#     ] = Field(..., description=_OUTCOME_DESCRIPTION)
+#     outcome_confidence: float = Field(
+#         ..., ge=0.0, le=1.0, description=_CONFIDENCE_DESCRIPTION
+#     )
+#     evidence_quote: str = Field(
+#         ...,
+#         description=(
+#             "Exact verbatim span from one abstract supporting this outcome's "
+#             "conclusion. Must relate to this specific therapy/condition "
+#             "combination only. Do not paraphrase or combine text across "
+#             "abstracts."
+#         ),
+#     )
+#     source_pmid: str = Field(
+#         ..., description="PubMed ID of the abstract the evidence_quote was taken from."
+#     )
+
+
+# class TrialClassification(BaseModel):
+#     """Stage B output: conclusions for every outcome identified during structuring."""
+
+#     model_config = ConfigDict(validate_by_name=True, alias_generator=str.lower)
+
+#     id: str = Field(..., description="Clinical trial identifier (NCT ID).")
+#     classified_outcomes: list[ClassifiedOutcome] = Field(
+#         ...,
+#         description=(
+#             "One entry per outcome_index given in the input. Must cover every "
+#             "outcome_index exactly once — no omissions, no duplicates."
+#         ),
+#     )
+
+
+#for singular pass version
+class TrialOutcome(BaseModel):
+    """A single outcome: one or more therapies tested against one or more
+    conditions, with one resolved verdict, consolidated across all abstracts
+    for this trial."""
+
+    model_config = ConfigDict(validate_by_name=True, alias_generator=str.lower)
+
+    therapies: list[Therapy] = Field(
+        ...,
+        description=(
+            "All therapies that are part of the regimen this outcome's verdict "
+            "applies to — including a background/standard-of-care/add-on-to drug "
+            "if the abstracts report the result as the COMBINED effect of that "
+            "regimen (e.g. 'empagliflozin as an add-on to liraglutide' results "
+            "in therapies=[empagliflozin, liraglutide], since the regimen "
+            "evaluated together is the combination, not just the newly added "
+            "agent). A combination regimen belongs in ONE outcome with multiple "
+            "therapies. Therapies tested as SEPARATE arms with results reported "
+            "separately (e.g. drug A vs. drug C, each independently, for the "
+            "same condition) must be split into SEPARATE outcomes — do not "
+            "combine unrelated arms into one outcome just because they share a "
+            "condition. Exclude only drugs that are not part of the evaluated "
+            "regimen at all ."
+        ),
+    )
+    conditions: list[Condition] = Field(
+        ...,
+        description=(
+            "All conditions this outcome's verdict applies to. Most outcomes "
+            "have exactly one condition; use multiple only if the abstracts "
+            "report a single shared verdict across more than one condition for "
+            "the same therapy/regimen."
+        ),
+    )
+    conclusion: Literal[
+    "positive",
+    "positive_partial",
+    "negative",
+    "negative_with_signal",
+    "mixed",
+    "safety_failure",
+    "inconclusive",
+] = Field(..., description=_OUTCOME_DESCRIPTION)
+    outcome_confidence: float = Field(
+        ...,
+        ge=0.0,
+        le=1.0,
+        description=_CONFIDENCE_DESCRIPTION,
+    )
+    evidence_quote: str = Field(
+        ...,
+        description=(
+            "Exact verbatim span from one abstract supporting this outcome's "
+            "conclusion. Must relate to this specific therapy/condition "
+            "combination only. Do not paraphrase or combine text across "
+            "abstracts."
+        ),
+    )
+    source_pmid: str = Field(
+        ...,
+        description="PubMed ID of the abstract the evidence_quote was taken from.",
+    )
+
+
+class TrialExtraction(BaseModel):
+    """All outcomes extracted for a single clinical trial, consolidated
+    across all of its associated abstracts."""
+
+    model_config = ConfigDict(validate_by_name=True, alias_generator=str.lower)
+
+    id: str = Field(..., description="Clinical trial identifier (NCT ID).")
+    outcomes: list[TrialOutcome] = Field(
+        ...,
+        description=(
+            "One entry per distinct therapy-combination/condition-set tested in "
+            "this trial. Two outcomes must never share an identical "
+            "(therapies, conditions) combination — see deduplication rules in "
+            "the system prompt. Return an empty list only if no outcome can be "
+            "identified."
         ),
     )

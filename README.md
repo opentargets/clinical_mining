@@ -22,13 +22,13 @@ This project provides tools to fetch, process, and annotate clinical trial data 
 
 ## Data Sources
 
-1. **AACT Database**  
+1. **AACT Database**
 
-    AACT database is a PostgreSQL database containing clinical trial data from the ClinicalTrials.gov database. We use Polars to connect to the database and return queried data in a DataFrame format. Credentials and connection parameters are provided via configuration.
+   AACT database is a PostgreSQL database containing clinical trial data from the ClinicalTrials.gov database. We use Polars to connect to the database and return queried data in a DataFrame format. Credentials and connection parameters are provided via configuration.
 
 2. **ChEMBL Drug Indication Data**
 
-    JSON file storing indications for drugs, and clinical candidate drugs, from a variety of sources (e.g., FDA, EMA, WHO ATC, ClinicalTrials.gov, INN, USAN).
+   JSON file storing indications for drugs, and clinical candidate drugs, from a variety of sources (e.g., FDA, EMA, WHO ATC, ClinicalTrials.gov, INN, USAN).
 
 3. **ChEMBL Clinical Trials Pipeline**
 
@@ -79,6 +79,7 @@ uv run clinical_mining +recipe=aact_llm_extractor \
 uv run clinical_mining +recipe=aact_llm_extractor \
   workflow.transform.generate.publications_map.parameters.enabled=true
 ```
+
 ### Configuring a Workflow Step
 
 Each step within a workflow is defined as a dictionary keyed by name:
@@ -87,11 +88,11 @@ Each step within a workflow is defined as a dictionary keyed by name:
 workflow:
   transform:
     generate:
-      my_step:                        # step name (becomes data_store key)
-        function: clinical_mining...  # full Python path
+      my_step: # step name (becomes data_store key)
+        function: clinical_mining... # full Python path
         parameters:
-          input: $previous_step       # reference another step's output
-          literal_value: 42           # literal values passed as-is
+          input: $previous_step # reference another step's output
+          literal_value: 42 # literal values passed as-is
 ```
 
 To override step parameters from the command line, use the full path:
@@ -113,11 +114,11 @@ Any step whose name starts with `output_` is automatically persisted:
 
 ### Environment Variables
 
-| Variable | Required for |
-|---|---|
-| `AACT_USER` | AACT database access (optional for localhost) |
-| `AACT_PASSWORD` | AACT database access (optional for localhost) |
-| `OPENAI_API_KEY` | LLM extraction workflow |
+| Variable         | Required for                                  |
+| ---------------- | --------------------------------------------- |
+| `AACT_USER`      | AACT database access (optional for localhost) |
+| `AACT_PASSWORD`  | AACT database access (optional for localhost) |
+| `OPENAI_API_KEY` | LLM extraction workflow                       |
 
 ### Contribute
 

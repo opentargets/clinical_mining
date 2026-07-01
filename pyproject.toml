@@ -22,6 +22,7 @@ dependencies = [
     "sqlalchemy>=2.0.42",
     "openai>=2.37.0",
     "biopython>=1.87",
+    "gcsfs>=2026.5.0",
 ]
 
 [project.scripts]

@@ -37,6 +37,44 @@ def sample_report(
     return report.sample(n=sample_size, seed=seed, shuffle=True)
 
 
+def build_prompts_nct_combined_abstracts(df: pl.DataFrame, nct_id: str | None = None) -> list[dict]:
+    """
+    Create one prompt containing all abstracts corresponding to each unique nct id
+    """
+    if nct_id is not None:
+        df = df.filter(pl.col("nct_id") == nct_id)
+    # group rows by nct_id, deduplicating by pmid within each group
+    grouped: dict[str, list[dict]] = {}
+    seen_pmids: dict[str, set] = {}
+
+    for row in df.to_dicts():
+        nct_id = str(row["nct_id"])
+        pmid = str(row["pmid"])
+
+        if nct_id not in grouped:
+            grouped[nct_id] = []
+            seen_pmids[nct_id] = set()
+
+        if pmid in seen_pmids[nct_id]:
+            continue
+        seen_pmids[nct_id].add(pmid)
+        grouped[nct_id].append(row)
+
+    results = []
+    for nct_id, rows in grouped.items():
+        abstract_blocks = "\n\n".join(
+            f"PubMed ID: {row['pmid']}\nAbstract:\n{row['abstract_text']}"
+            for row in rows
+        )
+
+        prompt = f"""Trial ID: {nct_id}
+
+{abstract_blocks}"""
+
+        results.append({"id": nct_id, "prompt": prompt})
+
+    return results
+
 def build_prompts(
     report: pl.DataFrame,
     trial_fields: dict,

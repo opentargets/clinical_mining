@@ -1,0 +1,37 @@
+# @package _global_
+# =================================================
+# RECIPE: Outcome Classification
+# =================================================
+# Classify trial outcomes by (drug, condition) pairs at the clinical-trial level, using OpenAI API to extract structured information from trial abstracts.
+#
+# Usage:
+#   uv run clinical_mining +recipe=outcome_classifier
+# =================================================
+
+# Input Data Sources
+inputs:
+  trial_abstracts:
+    format: parquet
+    path: benchmark_dataset_2.parquet
+
+# Workflow Definition
+workflow:
+  transform:
+    generate:
+      prompts:
+        function: clinical_mining.data_sources.aact.llm_extractor.build_prompts_nct_combined_abstracts
+        parameters:
+          df: $trial_abstracts
+
+      output_llm_extraction:
+        function: clinical_mining.workflows.llm.run_extraction
+        parameters:
+          prompts: $prompts
+          model_class: clinical_mining.schemas.TrialExtraction
+          system_prompt_path: src/clinical_mining/prompts/outcome_analysis_llm.txt
+          model: gpt-4.1-mini
+          openai_key: ${oc.env:OPENAI_API_KEY,""}
+          service_tier: auto
+          concurrency: 50
+          max_retries: 2
+          errors_dir: $output_dir

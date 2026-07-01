@@ -127,3 +127,6 @@ def build_publications_map(
         if pubs:
             result[nct_id] = pubs
     return result
+
+# x = fetch_publications([2687071, 7274607, 20852674, 2343436])
+# print(x)
