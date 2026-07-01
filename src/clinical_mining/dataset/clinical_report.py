@@ -9,6 +9,7 @@ from clinical_mining.schemas import (
     validate_schema,
 )
 from clinical_mining.utils.mapping import map_entities
+from clinical_mining.utils.text_cleaning import sanitise_text
 
 # Clinical status harmonization constants
 PHASE_TO_CATEGORY_MAP = {
@@ -154,6 +155,11 @@ class ClinicalReport:
 
         # Drop duplicates by id, keeping the row with the best clinical stage
         df = self.drop_duplicates(df)
+
+        df = df.with_columns(
+            # Apply sanitise_text to all string columns
+            pl.col(pl.String).map_elements(sanitise_text, return_dtype=pl.String)
+        )
 
         self.df = validate_schema(df, ClinicalReportSchema)
 
