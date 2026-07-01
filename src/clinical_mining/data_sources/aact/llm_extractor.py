@@ -15,6 +15,7 @@ from clinical_mining.schemas import (
     ExtractedDisease,
     ExtractedDrug,
 )
+from clinical_mining.utils.text_cleaning import sanitise_nested
 from clinical_mining.workflows.llm import _extractions_to_df
 
 
@@ -186,7 +187,7 @@ def _parse_single_record(
         }
 
     try:
-        payload = json.loads(text)
+        payload = sanitise_nested(json.loads(text))
     except json.JSONDecodeError as e:
         return None, {
             "file": path,
