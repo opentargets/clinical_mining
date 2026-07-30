@@ -37,42 +37,102 @@ def sample_report(
     return report.sample(n=sample_size, seed=seed, shuffle=True)
 
 
+_MISSING_TOKENS = {"", "nan", "none", "null", "n/a", "na", "not available"}
+ 
+ 
+def _clean_or_none(value) -> str | None:
+    """Return a stripped string, or None if the value is missing/null-ish.
+ 
+    Handles: Python None, NaN floats (polars/pandas null coercion), and the
+    common string sentinels ("", "nan", "None", "N/A", etc.) that show up
+    when a value was never populated upstream.
+    """
+    if value is None:
+        return None
+    try:
+        # catches float('nan'); a real string will raise TypeError here, which is fine
+        if value != value:  # NaN != NaN
+            return None
+    except TypeError:
+        pass
+    text = str(value).strip()
+    if not text or text.lower() in _MISSING_TOKENS:
+        return None
+    return text
+ 
+ 
 def build_prompts_nct_combined_abstracts(df: pl.DataFrame, nct_id: str | None = None) -> list[dict]:
     """
-    Create one prompt containing all abstracts corresponding to each unique nct id
+    Create one prompt per unique NCT ID: trial phase + brief description
+    (from the same dataset, expected to be repeated across that trial's
+    rows) if available, followed by all abstracts for that trial,
+    deduplicated by PMID.
+ 
+    trialDescription / trialPhase may be null, blank, or absent for a given
+    trial or row — this is handled gracefully, falling back to an explicit
+    "not provided" marker rather than emitting an empty or malformed block.
     """
     if nct_id is not None:
         df = df.filter(pl.col("nct_id") == nct_id)
+ 
     # group rows by nct_id, deduplicating by pmid within each group
     grouped: dict[str, list[dict]] = {}
     seen_pmids: dict[str, set] = {}
-
+ 
     for row in df.to_dicts():
-        nct_id = str(row["nct_id"])
+        row_nct_id = str(row["nct_id"])
         pmid = str(row["pmid"])
-
-        if nct_id not in grouped:
-            grouped[nct_id] = []
-            seen_pmids[nct_id] = set()
-
-        if pmid in seen_pmids[nct_id]:
+ 
+        if row_nct_id not in grouped:
+            grouped[row_nct_id] = []
+            seen_pmids[row_nct_id] = set()
+ 
+        if pmid in seen_pmids[row_nct_id]:
             continue
-        seen_pmids[nct_id].add(pmid)
-        grouped[nct_id].append(row)
-
+        seen_pmids[row_nct_id].add(pmid)
+        grouped[row_nct_id].append(row)
+ 
     results = []
-    for nct_id, rows in grouped.items():
+    for row_nct_id, rows in grouped.items():
+        # trialDescription/trialPhase are expected to be the same across all
+        # rows for a given nct_id; take the first genuinely non-null value.
+        description = next(
+            (
+                cleaned
+                for r in rows
+                if (cleaned := _clean_or_none(r.get("trialDescription"))) is not None
+            ),
+            None,
+        )
+        phase = next(
+            (
+                cleaned
+                for r in rows
+                if (cleaned := _clean_or_none(r.get("trialPhase"))) is not None
+            ),
+            None,
+        )
+ 
+        # Explicit "not provided" marker — never leave this section blank,
+        # and never let a null slip through as the literal string "None".
+        context_block = (
+            f"Trial Phase: {phase if phase is not None else 'Not provided.'}\n"
+            f"Trial Description: {description if description is not None else 'Not provided.'}"
+        )
+ 
         abstract_blocks = "\n\n".join(
             f"PubMed ID: {row['pmid']}\nAbstract:\n{row['abstract_text']}"
             for row in rows
         )
-
-        prompt = f"""Trial ID: {nct_id}
-
+ 
+        prompt = f"""Trial ID: {row_nct_id}
+ 
+{context_block}
+ 
 {abstract_blocks}"""
-
-        results.append({"id": nct_id, "prompt": prompt})
-
+ 
+        results.append({"id": row_nct_id, "prompt": prompt})
+ 
     return results
 
 def build_prompts(

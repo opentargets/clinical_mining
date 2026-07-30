@@ -4,42 +4,6 @@ from typing import Literal
 import polars as pl
 from pydantic import BaseModel, ConfigDict, Field
 
-OutcomeCategory =  Literal[
-    "positive",
-    "positive_partial",
-    "negative",
-    "negative_with_signal",
-    "mixed",
-    "safety_failure",
-    "inconclusive",
-]
-
-_OUTCOME_DESCRIPTION = (
-    "Classify the trial outcome for this drug-condition pair into ONE of:\n"
-    "- 'positive': primary endpoint met; intervention shown effective.\n"
-    "- 'positive_partial': primary endpoint partially met.\n"
-    "- 'mixed': some endpoints met, others not; or subgroups diverge.\n"
-    "- 'negative': primary endpoint failed; intervention not shown effective.\n"
-    "- 'negative_with_signal': primary endpoint failed but with some positive signals.\n"
-    "- 'safety_failure': trial stopped or failed due to adverse events or toxicity.\n"
-    "- 'inconclusive': insufficient data, results not reported, or ongoing.\n"
-    "- 'not_applicable': drug_condition_mentioned is False.\n"
-    "If both safety and efficacy failed, prefer 'safety_failure' over 'negative'.\n"
-    "If the abstract reports no results at all, use 'inconclusive'."
-)
-
-_CONFIDENCE_DESCRIPTION = (
-    "Confidence in the outcome_category, between 0.0 and 1.0:\n"
-    "- 0.95+: outcome explicitly stated (e.g. 'met the primary endpoint').\n"
-    "- 0.7-0.9: outcome strongly implied but not explicitly stated.\n"
-    "- Below 0.7: ambiguous or conflicting signals. Be honest.\n"
-    "Set to -1.0 if drug_condition_mentioned is False."
-)
-
-
-
-
-
 
 def validate_schema(df: pl.DataFrame, model: type[BaseModel]) -> pl.DataFrame:
     """Validates that all mandatory schema fields are present. Resulting DataFrame is reordered to show core fields first."""
@@ -351,8 +315,8 @@ class ClinicalReportExtractionSchema(BaseModel):
     )
     drug_intent: Literal[
         "therapeutic", "diagnostic", "prevention", "supportive_care", "other"
-    ] = Field(
-        ...,
+    ] | None = Field(
+        default=None,
         description=(
             "What the investigated_drugs are intended to do. This determines how to interpret "
             "primary_indications:\n"
@@ -369,8 +333,8 @@ class ClinicalReportExtractionSchema(BaseModel):
             "still 'therapeutic' if the drugs are tested as antifungal therapy."
         ),
     )
-    drug_intent_confidence: float = Field(
-        ...,
+    drug_intent_confidence: float | None = Field(
+        default=None,
         ge=0.0,
         le=1.0,
         description=(
@@ -445,25 +409,83 @@ class ClinicalReportExtractionSchema(BaseModel):
         ),
     )
 
+ 
+OutcomeCategory = Literal[
+    "efficacy",
+    "lack_of_efficacy",
+    "effectiveness",
+    "ineffectiveness",
+    "safety_failure",
+    "safety_tolerability",
+    "mixed",
+    "inconclusive",
+    "no_results",
+]
+_OUTCOME_DESCRIPTION = (
+    "The outcome category for this therapy/condition key. Determine it by the "
+    "CONCLUSION CLASSIFICATION decision procedure in the system prompt (the ordered "
+    "fact-tree) — classify strictly from the governing endpoint's result quoted in "
+    "evidence_quote. This is NOT a flat menu to pick from and the verdict is NOT re-derived "
+    "here; the lines below only disambiguate the enum tokens.\n"
+    "- 'efficacy': governing endpoint MET vs an INACTIVE reference (placebo / none / "
+    "historical / strategy-intensity-target).\n"
+    "- 'lack_of_efficacy': governing endpoint FAILED vs an INACTIVE reference.\n"
+    "- 'effectiveness': governing endpoint MET vs a named, distinct ACTIVE drug comparator "
+    "(superior, or non-inferiority margin met).\n"
+    "- 'ineffectiveness': NOT superior to a named ACTIVE drug comparator (inferior, "
+    "equivalent, no significant difference, or non-inferiority fail).\n"
+    "- 'safety_failure': trial/arm actually HALTED for toxicity/AEs/safety. Overrides every "
+    "other category, even a met primary — but only on an actual halt.\n"
+    "- 'safety_tolerability': only a safety / tolerability / MTD / RP2D / PK-PD readout and "
+    "efficacy was never assessed. Polarity-neutral; no comparator determination applies.\n"
+    "- 'mixed': a genuine category conflict for this key — two co-primary endpoints in "
+    "OPPOSITE directions, or abstracts disagreeing on category (after the MULTIPLE RESULTS "
+    "not-a-conflict exceptions).\n"
+    "- 'inconclusive': efficacy WAS assessed but is genuinely unresolvable; ALSO the single "
+    "trial-level row (empty therapies/conditions) when a provided trial description's "
+    "abstracts are all irrelevant (evidence_quote from the description, source_pmid null, "
+    "primary_endpoint null).\n"
+    "- 'no_results': no readout of any kind (protocol / ongoing / terminated pre-readout). "
+    "ANY data readout, even safety-only, is 'safety_tolerability' instead.\n"
+    "Comparator rules, override precedence, and all tie-breaks live in the system prompt; do "
+    "not duplicate or second-guess them here."
+)
+_CONFIDENCE_DESCRIPTION = (
+    "Confidence in the conclusion, between 0.0 and 1.0:\n"
+    "- 0.95+: outcome explicitly stated (e.g. 'met the primary endpoint', 'terminated due to "
+    "toxicity', 'the maximum tolerated dose was X').\n"
+    "- 0.7-0.9: outcome strongly implied but not explicitly stated, or the comparator type had "
+    "to be inferred.\n"
+    "- Below 0.7: ambiguous or conflicting signals. Be honest — low values are a useful signal "
+    "for human review, so do not inflate them.\n"
+    "For the single trial-level 'no relevant abstracts' row, this instead reflects confidence "
+    "that the abstracts are indeed unrelated to the trial, not confidence in any drug verdict."
+)
+
+
 class Therapy(BaseModel):
     """A single therapy (drug/intervention) referenced by an outcome."""
 
     model_config = ConfigDict(validate_by_name=True, alias_generator=str.lower)
-
     name: str = Field(
         ...,
         description=(
-            "Core INN name of the drug/intervention only. No route, formulation, "
-            "or dose. E.g. 'metformin', not 'oral metformin tablet'."
+            "Core INN name of the drug only — no route, formulation, or dose (e.g. "
+            "'metformin', not 'oral metformin tablet'). A non-drug component of the "
+            "regimen (e.g. radiotherapy, a device) may appear here, named plainly, "
+            "when it is evaluated as part of the regimen alongside a drug — but it "
+            "can never be the SOLE therapy, since every outcome's therapy set must "
+            "contain at least one real, named drug. Never a placebo, vehicle, or "
+            "excipient — those are comparators, not therapies."
         ),
     )
-    id: str = Field(
-        ...,
+    synonyms: list[str] | None = Field(
+        default=None,
         description=(
-            "Short identifier for this therapy, unique within this trial's "
-            "extraction (e.g. 'A', 'B', 'C'). The SAME therapy must reuse the "
-            "SAME id across every outcome in this trial where it appears — "
-            "this is how outcomes referencing the same drug are linked."
+            "Other names explicitly used in the trial text to refer to the same therapy, "
+            "such as brand names, abbreviations, code names, or alternative spellings. "
+            "Only include names explicitly mentioned in the input — do not infer or look up synonyms. "
+            "Omit if none are present."
         ),
     )
 
@@ -472,169 +494,149 @@ class Condition(BaseModel):
     """A single condition referenced by an outcome."""
 
     model_config = ConfigDict(validate_by_name=True, alias_generator=str.lower)
-
     name: str = Field(
         ...,
         description=(
-            "Most specific disease name explicitly stated in the abstracts. "
-            "No stage, severity, or modifiers. E.g. 'non-Hodgkin lymphoma', "
-            "not 'lymphoma'."
+            "Most specific disease entity explicitly stated in the abstracts; prefer "
+            "the specific term given in a parenthetical. Keep a modifier ONLY when it "
+            "names a distinct disease entity (e.g. 'triple-negative breast cancer'; "
+            "split 'tonsil and base-of-tongue cancer' into two separate conditions). "
+            "Drop etiology/comorbidity/severity/symptom modifiers and stage (e.g. "
+            "'breast cancer patients with loss of appetite' -> 'breast cancer'). Use "
+            "ONE name per disease across the whole trial (re-check for hidden "
+            "duplicates after renaming). E.g. 'non-Hodgkin lymphoma', not 'lymphoma'. "
+            "A subgroup-level name earns its own condition only when it is a distinct "
+            "disease entity (molecular subtype, distinct anatomical site) reported "
+            "with per-subgroup results; use the umbrella term for a single pooled "
+            "result across a mixed population. Clinical/demographic/treatment-pattern "
+            "subgroups are NOT conditions — they belong in the outcome's 'population'."
         ),
     )
-    id: str = Field(
-        ...,
+    synonyms: list[str] | None = Field(
+        default=None,
         description=(
-            "Short identifier for this condition, unique within this trial's "
-            "extraction (e.g. '1', '2'). The SAME condition must reuse the "
-            "SAME id across every outcome in this trial where it appears."
+            "Other names explicitly used in the trial text to refer to the same condition, "
+            "such as abbreviations or alternative spellings. "
+            "Only include names explicitly mentioned in the input — do not infer or look up synonyms. "
+            "Omit if none are present."
         ),
     )
 
-# class InventoryItem(BaseModel):
-#     """One drug or condition mentioned anywhere in the trial's abstracts,
-#     with an explicit judgment on whether it has reportable clinical data."""
 
-#     model_config = ConfigDict(validate_by_name=True, alias_generator=str.lower)
+class KeyReconciliation(BaseModel):
+    """Forced Pass C + Pass D scratch for ONE outcome key, produced BEFORE any
+    'outcomes' row exists.
 
-#     entity_type: Literal["therapy", "condition"]
-#     name: str = Field(..., description="As worded in the abstract(s).")
-#     has_clinical_data: bool = Field(
-#         ...,
-#         description=(
-#             "True only if at least one abstract reports patient-level clinical "
-#             "efficacy or safety data specific to this entity (a result describing "
-#             "patient response, survival, improvement, adverse events, or other "
-#             "clinical outcome) — not merely that the entity was mentioned, "
-#             "enrolled, or used in screening/run-in."
-#         ),
-#     )
-#     reasoning: str = Field(
-#         ..., description="One line justifying has_clinical_data."
-#     )
+    This model is the JSON home for the reasoning the system prompt calls the
+    forced two-step. Because the API runs under strict structured output with no
+    room for free text, the collapse cannot happen on a scratchpad — it must
+    happen HERE, in fields the model is required to fill before it writes
+    'outcomes'. One entry per DISTINCT (therapies, conditions) key.
 
+    It is working scratch, not a deliverable: downstream consumers should ignore
+    it. Its only job is to force the model to inventory every endpoint and then
+    name a single governing measure per key, so the verdict in 'outcomes' is
+    resolved on one chosen endpoint rather than a blur of all of them.
 
-# class StructuredOutcome(BaseModel):
-#     """One (therapies, conditions) combination identified for this trial,
-#     with no conclusion yet — that is determined in a later step."""
-
-#     model_config = ConfigDict(validate_by_name=True, alias_generator=str.lower)
-
-#     outcome_index: int = Field(
-#         ..., description="0-based index, unique within this trial's outcomes list, no gaps or repeats."
-#     )
-#     therapies: list[Therapy] = Field(
-#         ...,
-#         description=(
-#             "All therapies that are part of the regimen this outcome applies to — "
-#             "including a background/standard-of-care/add-on-to drug if the "
-#             "abstracts report the result as the COMBINED effect of that regimen "
-#             "(e.g. 'a as an add-on to b' results in "
-#             "therapies=[a, b], since the regimen evaluated "
-#             "together is the combination, not just the newly added agent). A "
-#             "combination regimen belongs in ONE outcome with multiple therapies. "
-#             "Therapies tested as SEPARATE arms with results reported separately "
-#             "(e.g. drug A vs. drug B vs. placebo, each reported independently) "
-#             "must be split into SEPARATE outcomes — do not combine unrelated arms "
-#             "into one outcome just because they share a condition. Exclude only "
-#             "drugs that are not part of the evaluated regimen at all."
-#         ),
-#     )
-#     conditions: list[Condition] = Field(
-#         ...,
-#         description=(
-#             "All conditions this outcome applies to."
-#         ),
-#     )
-#     reasoning: str = Field(
-#         ...,
-#         description=(
-#             "One or two sentences: why these therapies are grouped/split this "
-#             "way, and why these conditions are grouped/split this way, citing "
-#             "how results were reported in the abstract(s)."
-#         ),
-#     )
-
-
-# class TrialStructuring(BaseModel):
-#     """Stage A output: inventory and structured (therapies, conditions)
-#     outcomes for a trial, with no conclusions yet."""
-
-#     model_config = ConfigDict(validate_by_name=True, alias_generator=str.lower)
-
-#     id: str = Field(..., description="Clinical trial identifier (NCT ID).")
-#     inventory: list[InventoryItem] = Field(
-#         ...,
-#         description="Every distinct drug/intervention and condition/subgroup mentioned anywhere in the abstracts.",
-#     )
-#     outcomes: list[StructuredOutcome] = Field(
-#         ...,
-#         description=(
-#             "One entry per distinct therapy-combination/condition-set tested in "
-#             "this trial. Two outcomes must never share an identical "
-#             "(therapies, conditions) combination. Return an empty list only if "
-#             "no outcome can be identified."
-#         ),
-#     )
-
-
-# class ClassifiedOutcome(BaseModel):
-#     """The conclusion, confidence, and evidence for one outcome already
-#     identified during structuring."""
-
-#     model_config = ConfigDict(validate_by_name=True, alias_generator=str.lower)
-
-#     outcome_index: int = Field(
-#         ..., description="Must match the outcome_index given for this outcome in the structuring step."
-#     )
-#     conclusion: Literal[
-#         "positive",
-#         "positive_partial",
-#         "negative",
-#         "negative_with_signal",
-#         "mixed",
-#         "safety_failure",
-#         "inconclusive",
-#     ] = Field(..., description=_OUTCOME_DESCRIPTION)
-#     outcome_confidence: float = Field(
-#         ..., ge=0.0, le=1.0, description=_CONFIDENCE_DESCRIPTION
-#     )
-#     evidence_quote: str = Field(
-#         ...,
-#         description=(
-#             "Exact verbatim span from one abstract supporting this outcome's "
-#             "conclusion. Must relate to this specific therapy/condition "
-#             "combination only. Do not paraphrase or combine text across "
-#             "abstracts."
-#         ),
-#     )
-#     source_pmid: str = Field(
-#         ..., description="PubMed ID of the abstract the evidence_quote was taken from."
-#     )
-
-
-# class TrialClassification(BaseModel):
-#     """Stage B output: conclusions for every outcome identified during structuring."""
-
-#     model_config = ConfigDict(validate_by_name=True, alias_generator=str.lower)
-
-#     id: str = Field(..., description="Clinical trial identifier (NCT ID).")
-#     classified_outcomes: list[ClassifiedOutcome] = Field(
-#         ...,
-#         description=(
-#             "One entry per outcome_index given in the input. Must cover every "
-#             "outcome_index exactly once — no omissions, no duplicates."
-#         ),
-#     )
-
-
-#for singular pass version
-class TrialOutcome(BaseModel):
-    """A single outcome: one or more therapies tested against one or more
-    conditions, with one resolved verdict, consolidated across all abstracts
-    for this trial."""
+    NOTE: this model deliberately does NOT carry a category/verdict field. The
+    verdict is committed once, later, in TrialOutcome.conclusion — AFTER the
+    governing endpoint's own result has been quoted in evidence_quote. Choosing a
+    category here (before that quote exists) produced unstable, ungrounded
+    verdicts, so classification is intentionally deferred out of the scratch."""
 
     model_config = ConfigDict(validate_by_name=True, alias_generator=str.lower)
 
+    therapies: list[str] = Field(
+        ...,
+        description=(
+            "Normalised, alphabetically-ordered core drug name(s) for this key "
+            "(same normalisation as the outcome's therapies). Empty ONLY for the "
+            "trial-level irrelevance row."
+        ),
+    )
+    conditions: list[str] = Field(
+        ...,
+        description=(
+            "Normalised, alphabetically-ordered disease name(s) for this key "
+            "(same normalisation as the outcome's conditions). Empty ONLY for the "
+            "trial-level irrelevance row."
+        ),
+    )
+    endpoints_considered: list[str] = Field(
+        ...,
+        description=(
+            "Pass D Step 1 — the INVENTORY. List EVERY endpoint/result reported "
+            "for this key across the pooled abstracts: primary, secondary, "
+            "exploratory, surrogate, and safety endpoints; every row of a GRADE / "
+            "'summary of findings' table; every forest-plot estimate or pooled "
+            "comparison. These are NOT rows — listing an endpoint here NEVER "
+            "creates an outcome; the list exists only to be collapsed to one "
+            "governing measure. A GRADE table with N endpoint-rows becomes N "
+            "entries HERE, never N entries in 'outcomes'. Empty only for a "
+            "no_results key or the trial-level irrelevance row."
+        ),
+    )
+    governing_endpoint: str | None = Field(
+        ...,
+        description=(
+            "Pass D Step 2 — the SINGLE measure chosen from endpoints_considered "
+            "to govern this key's verdict, named plainly (e.g. 'all-cause "
+            "mortality', 'objective response rate'). This choice is fixed: the "
+            "outcome's conclusion is resolved from THIS endpoint's result alone, "
+            "and every other endpoint in the inventory is discarded. MUST equal "
+            "the resulting outcome's primary_endpoint. Null only for a no_results "
+            "key or the trial-level irrelevance row."
+        ),
+    )
+    governing_basis: Literal[
+        "prespecified_primary",
+        "authors_conclusion",
+        "hardest_endpoint",
+        "single_endpoint",
+        "safety_only",
+        "no_readout",
+        "trial_irrelevant",
+    ] = Field(
+        ...,
+        description=(
+            "Why governing_endpoint governs, chosen in this priority order: "
+            "'prespecified_primary' = a stated primary efficacy endpoint sets the "
+            "verdict; else 'authors_conclusion' = the endpoint the authors "
+            "foreground in their own bottom line — for a review or meta-analysis "
+            "this is the 'Authors' conclusions' statement, NOT the summary-of-"
+            "findings / GRADE table; else 'hardest_endpoint' = fallback to the "
+            "hardest clinical endpoint reported (e.g. all-cause mortality over a "
+            "surrogate or a lone adverse-event count) when the authors state no "
+            "clear bottom line. Use 'single_endpoint' when only one endpoint was "
+            "reported; 'safety_only' when no efficacy was assessed (verdict is "
+            "safety_tolerability); 'no_readout' when no result of any kind exists "
+            "yet (no_results); 'trial_irrelevant' for the trial-level irrelevance "
+            "row."
+        ),
+    )
+
+
+# for singular pass version
+class TrialOutcome(BaseModel):
+    """A single outcome: one or more therapies tested against one or more
+    conditions, with one resolved verdict, consolidated across all abstracts
+    for this trial.
+
+    Field order is deliberate and load-bearing: primary_endpoint (which measure
+    governs) is named first, then evidence_quote captures THAT measure's reported
+    result, and only THEN is conclusion classified from that quoted result. Do not
+    reorder — classifying before the governing result is quoted produces
+    inconsistent verdicts.
+
+    EXCEPTION: if none of this trial's abstracts actually relate to the
+    trial (see the system prompt's Relevance Check), this may instead be a
+    single trial-level row with therapies=[], conditions=[],
+    population=None, primary_endpoint=None, conclusion='inconclusive',
+    evidence_quote drawn from the trial description, and source_pmid=None.
+    That row must be the only outcome emitted for the trial in that
+    scenario."""
+
+    model_config = ConfigDict(validate_by_name=True, alias_generator=str.lower)
     therapies: list[Therapy] = Field(
         ...,
         description=(
@@ -649,8 +651,15 @@ class TrialOutcome(BaseModel):
             "separately (e.g. drug A vs. drug C, each independently, for the "
             "same condition) must be split into SEPARATE outcomes — do not "
             "combine unrelated arms into one outcome just because they share a "
-            "condition. Exclude only drugs that are not part of the evaluated "
-            "regimen at all ."
+            "condition. In a head-to-head trial BOTH active arms get their own "
+            "outcome, including the active comparator. Every non-empty therapy "
+            "set MUST contain at least one real, named drug; a non-drug "
+            "component (radiotherapy, device) may sit alongside a drug but never "
+            "substitutes for one. Never emit an outcome whose therapy is a "
+            "placebo, vehicle, or excipient. Exclude only drugs that are not "
+            "part of the evaluated regimen at all. May be an EMPTY list only in "
+            "the single trial-level row for a trial whose abstracts are all "
+            "irrelevant to it — see class docstring."
         ),
     )
     conditions: list[Condition] = Field(
@@ -659,36 +668,102 @@ class TrialOutcome(BaseModel):
             "All conditions this outcome's verdict applies to. Most outcomes "
             "have exactly one condition; use multiple only if the abstracts "
             "report a single shared verdict across more than one condition for "
-            "the same therapy/regimen."
+            "the same therapy/regimen. In basket or multi-cohort trials, emit "
+            "one outcome PER indication rather than one pooled outcome covering "
+            "all of them. May be an EMPTY list only in the same trial-level "
+            "irrelevance row described in the class docstring."
         ),
     )
-    conclusion: Literal[
-    "positive",
-    "positive_partial",
-    "negative",
-    "negative_with_signal",
-    "mixed",
-    "safety_failure",
-    "inconclusive",
-] = Field(..., description=_OUTCOME_DESCRIPTION)
+    population: str | None = Field(
+        default=None,
+        description=(
+            "The specific patient subgroup this outcome's verdict applies to, "
+            "when the abstracts report a result restricted to a subgroup rather "
+            "than the whole enrolled population — e.g. 'patients without "
+            "delayed dosing', 'patients undertreated based on age', 'elderly "
+            "(>=65) subset'. Copy the population descriptor verbatim from the "
+            "abstract; do not invent, infer, or normalise one. Leave null (or "
+            "omit) when the verdict applies to the full enrolled/randomised "
+            "population for this therapy/condition, which is the common case. "
+            "This captures clinical/demographic/treatment-pattern subgroups "
+            "that are NOT distinct disease entities — a molecular subtype or "
+            "distinct anatomical site is instead its own 'conditions' entry, "
+            "not a population. This field is DESCRIPTIVE ONLY and is NOT part "
+            "of the outcome key: (therapies, conditions) remains the sole "
+            "identifier, so two outcomes still may not share an identical "
+            "(therapies, conditions) combination even if their populations "
+            "differ. When per-subgroup results differ for one such key (e.g. "
+            "one subgroup benefits, another does not, both from the same "
+            "abstract), they still collapse to a SINGLE row per Pass D — the "
+            "verdict is resolved from the governing endpoint's own result and "
+            "this field cannot represent both subgroups, so record whichever "
+            "subgroup the surviving evidence_quote describes, leaving the row "
+            "visibly subgroup-driven for human review."
+        ),
+    )
+    primary_endpoint: str | None = Field(
+        default=None,
+        description=(
+            "STEP 1 of this row — decide this BEFORE evidence_quote and "
+            "conclusion. The measure that governs this outcome's verdict, and it "
+            "MUST equal the governing_endpoint chosen for this key in "
+            "key_reconciliation. For an efficacy-category outcome (efficacy / "
+            "lack_of_efficacy / effectiveness / ineffectiveness) or an "
+            "'inconclusive' outcome, this is the governing efficacy measure, e.g. "
+            "'overall survival', 'objective response rate', 'change in HbA1c from "
+            "baseline', 'progression-free survival'. For a 'safety_tolerability' "
+            "outcome, where no efficacy was assessed, name the governing "
+            "safety/dose-finding measure instead, e.g. 'maximum tolerated dose', "
+            "'recommended phase 2 dose', 'dose-limiting toxicities', 'incidence of "
+            "adverse events', 'pharmacokinetic parameters'. When a source reports "
+            "many endpoints for this key, this is still ONE outcome resolved on "
+            "the SINGLE governing measure — not one outcome per endpoint. If the "
+            "key has two genuine co-primary endpoints pointing in opposite "
+            "directions (conclusion 'mixed'), name BOTH, separated by '; '. Null "
+            "ONLY when 'conclusion' is 'no_results' (no readout of any kind "
+            "exists), or for the trial-level 'no relevant abstracts' row."
+        ),
+    )
+    evidence_quote: str = Field(
+        ...,
+        description=(
+            "STEP 2 of this row — write this BEFORE conclusion. The exact verbatim "
+            "span reporting the RESULT of the governing measure named in "
+            "primary_endpoint (e.g. the sentence stating whether all-cause "
+            "mortality was reduced), for this specific therapy/condition "
+            "combination only. This quote is what conclusion is classified from, "
+            "so it must be the governing endpoint's own result — NOT a quote about "
+            "a secondary or exploratory endpoint, and not paraphrased or combined "
+            "across abstracts. EXCEPTION: for the trial-level 'no relevant "
+            "abstracts' row, this is instead a verbatim span from the trial "
+            "description indicating what the trial was designed to test — only "
+            "usable when a real trial description was actually provided (not 'Not "
+            "provided.')."
+        ),
+    )
+    source_pmid: str | None = Field(
+        default=None,
+        description=(
+            "PubMed ID of the abstract the evidence_quote was taken from. "
+            "Required for every normal outcome. Null ONLY for the trial-level "
+            "'no relevant abstracts' row, where evidence_quote is drawn from "
+            "the trial description rather than a specific abstract."
+        ),
+    )
+    conclusion: OutcomeCategory = Field(
+        ...,
+        description=(
+            "STEP 3 of this row — classify LAST, strictly from the governing "
+            "endpoint's result quoted in evidence_quote above. Do not classify "
+            "from the overall impression of the paper or from any other endpoint. "
+            + _OUTCOME_DESCRIPTION
+        ),
+    )
     outcome_confidence: float = Field(
         ...,
         ge=0.0,
         le=1.0,
         description=_CONFIDENCE_DESCRIPTION,
-    )
-    evidence_quote: str = Field(
-        ...,
-        description=(
-            "Exact verbatim span from one abstract supporting this outcome's "
-            "conclusion. Must relate to this specific therapy/condition "
-            "combination only. Do not paraphrase or combine text across "
-            "abstracts."
-        ),
-    )
-    source_pmid: str = Field(
-        ...,
-        description="PubMed ID of the abstract the evidence_quote was taken from.",
     )
 
 
@@ -697,15 +772,36 @@ class TrialExtraction(BaseModel):
     across all of its associated abstracts."""
 
     model_config = ConfigDict(validate_by_name=True, alias_generator=str.lower)
-
     id: str = Field(..., description="Clinical trial identifier (NCT ID).")
+    key_reconciliation: list[KeyReconciliation] = Field(
+        ...,
+        description=(
+            "FILL THIS FIRST, before writing 'outcomes'. One entry per DISTINCT "
+            "(therapies, conditions) key you will emit. This is the forced "
+            "collapse step: (1) fix the set of distinct keys here — this count is "
+            "the number of outcome rows and nothing after may change it; (2) for "
+            "each key, inventory every reported endpoint in endpoints_considered, "
+            "then name the ONE governing_endpoint. THEN emit exactly one 'outcomes' "
+            "entry per entry in this list, with matching (therapies, conditions) "
+            "and primary_endpoint = governing_endpoint. len(outcomes) MUST equal "
+            "the number of distinct keys here. A GRADE / summary-of-findings table "
+            "with N endpoint-rows is ONE key with N endpoints_considered — never N "
+            "outcomes. This field is working scratch and is ignored downstream; "
+            "producing it correctly is what prevents one-row-per-endpoint "
+            "duplication."
+        ),
+    )
     outcomes: list[TrialOutcome] = Field(
         ...,
         description=(
             "One entry per distinct therapy-combination/condition-set tested in "
-            "this trial. Two outcomes must never share an identical "
-            "(therapies, conditions) combination — see deduplication rules in "
-            "the system prompt. Return an empty list only if no outcome can be "
-            "identified."
+            "this trial — exactly one per key in key_reconciliation. Two outcomes "
+            "must never share an identical (therapies, conditions) combination — "
+            "see deduplication rules in the system prompt. Return an empty list if "
+            "abstracts relate to the trial but no drug can be identified in any of "
+            "them. If, instead, NONE of the abstracts relate to this trial at all, "
+            "return a single trial-level inconclusive row per the Relevance "
+            "Check rules in the system prompt — do not return an empty list "
+            "in that case."
         ),
     )

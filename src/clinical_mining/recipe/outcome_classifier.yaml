@@ -12,7 +12,7 @@
 inputs:
   trial_abstracts:
     format: parquet
-    path: benchmark_dataset_2.parquet
+    path: testing.parquet
 
 # Workflow Definition
 workflow:

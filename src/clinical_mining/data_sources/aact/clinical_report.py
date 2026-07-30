@@ -6,6 +6,8 @@ import polars as pl
 
 from clinical_mining.dataset import ClinicalReport
 from clinical_mining.schemas import ClinicalReportType, ClinicalSource
+from clinical_mining.data_sources.pubmed import fetch_publications 
+from clinical_mining.data_sources.aact.llm_extractor import parse_batch_results
 
 
 def process_interventions(interventions: pl.DataFrame) -> pl.DataFrame:
@@ -203,3 +205,83 @@ def extract_clinical_report(
             )
         )
     )
+
+
+def build_aact_dataset(studies, interventions, conditions, study_references):
+    llm_batch_results = parse_batch_results(
+        "gs://open-targets-pipeline-runs/ds/26.06.0-dev2/input/clinical_report/aact_extraction_batch_results/"
+    )
+    llm_indications = llm_batch_results.df.select(
+        'id',
+        pl.col('investigated_drugs').list.eval(pl.element().struct.field('drug').unique()).alias('drugs'),
+        pl.col('primary_indications').list.eval(pl.element().struct.field('name').unique()).alias('diseases'),
+    )
+
+    #only keep RESULT for study references
+    if study_references is not None:
+        if 'reference_type' in study_references.columns:
+            study_references = study_references.filter(pl.col('reference_type') != 'BACKGROUND')
+
+    clinical_report = extract_clinical_report(
+        studies=studies,
+        interventions=interventions,
+        conditions=conditions,
+        additional_metadata=[study_references],
+        aggregation_specs={'pmid': {'group_by': 'nct_id', 'alias': 'literature'}},
+        llm_extractions=llm_indications,
+    )
+
+    report_df = clinical_report.df.rename({"id": "nct_id"})
+
+    if "reference_type" not in report_df.columns:
+        if "trial_reference_type" in report_df.columns:
+            report_df = report_df.rename({"trial_reference_type": "reference_type"})
+        else:
+            report_df = report_df.with_columns(pl.lit(None, dtype=pl.String).alias("reference_type"))
+
+    if "trialDescription" not in report_df.columns:
+        for candidate in ("trialDescription", "trial_description", "trial_trialDescription"):
+            if candidate in report_df.columns:
+                report_df = report_df.rename({candidate: "trialDescription"})
+                break
+        else:
+            report_df = report_df.with_columns(pl.lit(None, dtype=pl.String).alias("trialDescription"))
+
+    if "trialPhase" not in report_df.columns:
+        for candidate in ("trialPhase", "trial_phase", "trial_trialPhase"):
+            if candidate in report_df.columns:
+                report_df = report_df.rename({candidate: "trialPhase"})
+                break
+        else:
+            report_df = report_df.with_columns(pl.lit(None, dtype=pl.String).alias("trialPhase"))
+
+    dataset = (
+        report_df
+        .explode("diseases")
+        .explode("drugs")
+        .with_columns(
+            pl.col("diseases").struct.field("diseaseFromSource").alias("condition"),
+            pl.col("drugs").struct.field("drugFromSource").alias("drug"),
+        )
+        .drop("diseases", "drugs")
+        .filter(pl.col("drug").is_not_null())
+        .explode("trialLiterature")
+        .rename({"trialLiterature": "pmid"})
+        .filter(pl.col("pmid").is_not_null())
+        .select(["nct_id", "drug", "condition", "pmid", "reference_type", "trialDescription", "trialPhase"])
+    )
+
+    pmids = dataset.select(pl.col("pmid")).unique().to_series().drop_nulls().to_list()
+    publications = fetch_publications(pmids)
+    abstracts_df = pl.DataFrame([
+        {"pmid": pmid, "abstract_text": publications.get(pmid, {}).get("abstractText", "")}
+        for pmid in pmids
+    ])
+
+    dataset = dataset.join(abstracts_df, on="pmid", how="left")
+    return dataset.select(["nct_id", "drug", "condition", "pmid", "abstract_text", "reference_type", "trialDescription", "trialPhase"])
+
+
+
+
+

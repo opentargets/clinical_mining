@@ -1,32 +1,30 @@
-"""Generic LLM extraction engine.
 
-Accepts a list of pre-built prompts and any Pydantic model for response validation.
-Returns a Polars DataFrame of extractions (for parquet output) or None (inspect mode).
-
-Flex processing (service_tier="flex") is enabled by default for ~50% cost
-reduction; requests automatically fall back to "auto" on capacity shortage.
-"""
 
 from __future__ import annotations
-
+ 
 import asyncio
 import copy
+import hashlib
 import json
 import logging
+import math
 import traceback
 from collections.abc import Sequence
 from importlib import import_module
 from pathlib import Path
-
+ 
 import polars as pl
 from loguru import logger
 from openai import APIStatusError, AsyncOpenAI
 from pydantic import BaseModel
-
+ 
 logging.getLogger("openai").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
+ 
 
-
+_REQUESTS_PER_CACHE_KEY = 10
+ 
+ 
 def run_extraction(
     prompts: list[dict],
     model_class: str,
@@ -39,7 +37,7 @@ def run_extraction(
     errors_dir: str | Path | None = None,
 ) -> pl.DataFrame | None:
     """Extract structured information from pre-built prompts using an LLM.
-
+ 
     Args:
         prompts: List of dicts with keys "id" and "prompt".
         model_class: Dotted path to a Pydantic model class for response
@@ -58,29 +56,29 @@ def run_extraction(
             rate-limit, 5xx). Passed directly to the SDK client.
         errors_dir: Directory for errors.jsonl. Defaults to the working
             directory.
-
+ 
     Returns:
         Polars DataFrame with one row per successful extraction, or None in
         single-prompt inspect mode.
     """
     if not openai_key:
         raise ValueError("openai_key must be a non-empty string.")
-
+ 
     model_cls = _import_class(model_class)
     system_prompt = Path(system_prompt_path).read_text()
-
+ 
     timeout = (
         900 if service_tier == "flex" else 600
     )  # 15 minutes for flex, 10 minutes for auto as per OpenAI recommendations
     client = AsyncOpenAI(api_key=openai_key, timeout=timeout, max_retries=max_retries)
-
+ 
     # ── Inspect mode: single prompt ───────────────────────────────────────────
     if len(prompts) == 1:
         entry = prompts[0]
         logger.info("\n── Prompt sent to model ─────────────────────────────────────")
         logger.info(entry["prompt"])
         logger.info("─────────────────────────────────────────────────────────────\n")
-
+ 
         extractions, errors = asyncio.run(
             _run_async(
                 prompts,
@@ -95,7 +93,7 @@ def run_extraction(
         if errors:
             logger.error("Error: %s", errors[0]["error"])
             raise RuntimeError(errors[0]["error"])
-
+ 
         logger.info(
             json.dumps(
                 json.loads(extractions[0].model_dump_json(exclude_none=True)),
@@ -103,7 +101,7 @@ def run_extraction(
             )
         )
         return None
-
+ 
     # ── Batch mode ────────────────────────────────────────────────────────────
     logger.info(
         "Running extraction: model=%s  concurrency=%d  service_tier=%s",
@@ -119,13 +117,13 @@ def run_extraction(
     logger.info(
         "Extraction complete: %d succeeded, %d failed.", len(extractions), len(errors)
     )
-
+ 
     if errors:
         error_path = (
             Path(errors_dir) / "errors.jsonl" if errors_dir else Path("errors.jsonl")
         )
         error_path.write_text("\n".join(json.dumps(e) for e in errors) + "\n")
-
+ 
         for err in errors[:5]:
             logger.error(
                 "Failed  id=%-30s  type=%s  message=%s",
@@ -137,29 +135,29 @@ def run_extraction(
             logger.error(
                 "... plus %d more errors — see %s", len(errors) - 5, error_path
             )
-
+ 
     return _extractions_to_df(extractions)
-
-
+ 
+ 
 # ── Internal helpers ──────────────────────────────────────────────────────────
-
-
+ 
+ 
 def _import_class(dotted_path: str) -> type[BaseModel]:
     """Dynamically import a Pydantic model class from a dotted module path."""
     module_path, class_name = dotted_path.rsplit(".", 1)
     return getattr(import_module(module_path), class_name)
-
-
+ 
+ 
 def _patch_schema(schema: dict) -> dict:
     """Patch a JSON schema for OpenAI structured-output compatibility.
-
+ 
     OpenAI's structured-output mode requires every object node to declare
     ``additionalProperties: false`` and enumerate all properties under
     ``required``. Pydantic's ``model_json_schema`` does not emit these by
     default, so we add them in a single recursive pass.
     """
     schema = copy.deepcopy(schema)
-
+ 
     def _walk(node: object) -> None:
         if isinstance(node, dict):
             if node.get("type") == "object" or "properties" in node:
@@ -171,11 +169,74 @@ def _patch_schema(schema: dict) -> dict:
         elif isinstance(node, list):
             for item in node:
                 _walk(item)
-
+ 
     _walk(schema)
     return schema
-
-
+ 
+ 
+def _prefix_fingerprint(system_prompt: str, schema: dict, model: str) -> str:
+    """Stable short hash of everything that forms the cacheable prompt prefix.
+ 
+    Used as the base of ``prompt_cache_key`` so that editing the system prompt or
+    the schema automatically starts a new cache namespace, rather than routing to
+    machines holding a now-stale prefix. Deliberately uses hashlib rather than
+    ``hash()``, whose string hashing is salted per process and so would produce a
+    different key on every run.
+    """
+    payload = json.dumps(
+        {"model": model, "system_prompt": system_prompt, "schema": schema},
+        sort_keys=True,
+    )
+    return hashlib.sha256(payload.encode()).hexdigest()[:12]
+ 
+ 
+def _cache_key(fingerprint: str, entry_id: str, n_buckets: int) -> str:
+    """Bucket requests across a small number of cache keys.
+ 
+    A single key would exceed OpenAI's ~15 req/min per-key guidance at our
+    concurrency, but too many keys fragment the cache across machines. Bucketing
+    on a stable hash of the record id keeps a given record on the same key across
+    reruns, which helps on retries.
+    """
+    if n_buckets <= 1:
+        return fingerprint
+    bucket = int(hashlib.sha256(str(entry_id).encode()).hexdigest(), 16) % n_buckets
+    return f"{fingerprint}-{bucket}"
+ 
+ 
+def _log_cache_stats(usages: list[dict]) -> None:
+    """Summarise prompt-cache performance across a completed run.
+ 
+    ``cached_tokens`` is reported on every response, including ones below the
+    1024-token caching threshold, so a flat zero is a real miss rather than a
+    missing field.
+    """
+    if not usages:
+        return
+ 
+    total_input = sum(u["input_tokens"] for u in usages)
+    total_cached = sum(u["cached_tokens"] for u in usages)
+    n_hits = sum(1 for u in usages if u["cached_tokens"] > 0)
+ 
+    if total_input == 0:
+        return
+ 
+    logger.info(
+        "Prompt cache: {}/{} requests hit ({:.1%})  |  {:,}/{:,} input tokens cached ({:.1%})",
+        n_hits,
+        len(usages),
+        n_hits / len(usages),
+        total_cached,
+        total_input,
+        total_cached / total_input,
+    )
+    if n_hits == 0:
+        logger.warning(
+            "Prompt cache: zero hits. Check that the prefix (system prompt + schema) "
+            "exceeds 1024 tokens and is byte-identical across requests."
+        )
+ 
+ 
 async def _run_async(
     prompts: list[dict],
     model_cls: type[BaseModel],
@@ -187,9 +248,17 @@ async def _run_async(
 ) -> tuple[list[BaseModel], list[dict]]:
     semaphore = asyncio.Semaphore(concurrency)
     schema = _patch_schema(model_cls.model_json_schema(by_alias=True))
-
-    tasks = [
-        _extract_record(
+ 
+    fingerprint = _prefix_fingerprint(system_prompt, schema, model)
+    n_buckets = max(1, math.ceil(concurrency / _REQUESTS_PER_CACHE_KEY))
+    logger.info(
+        "Prompt cache: prefix fingerprint={}  cache_key_buckets={}",
+        fingerprint,
+        n_buckets,
+    )
+ 
+    def _make_task(entry: dict):
+        return _extract_record(
             semaphore,
             client,
             entry,
@@ -198,16 +267,43 @@ async def _run_async(
             model,
             schema,
             service_tier,
+            _cache_key(fingerprint, entry["id"], n_buckets),
         )
-        for entry in prompts
-    ]
-    results = await asyncio.gather(*tasks)
-
-    extractions = [r for r, _ in results if r is not None]
-    errors = [e for _, e in results if e is not None]
+ 
+    results: list[tuple[BaseModel | None, dict | None, dict | None]] = []
+    remaining = prompts
+ 
+    # Warm-up: seed EVERY cache-key bucket before the main fan-out. Requests are
+    # bucketed across n_buckets keys, and a cold key's first concurrent wave all
+    # misses before any one of them populates it — so warming only a single
+    # bucket leaves the rest cold and the miss count scales with bucket count
+    # rather than with cache health. The warm-up calls run concurrently, so this
+    # costs one round-trip of latency regardless of how many buckets there are.
+    if len(prompts) > n_buckets:
+        seeds: dict[str, dict] = {}
+        for entry in prompts:
+            seeds.setdefault(_cache_key(fingerprint, entry["id"], n_buckets), entry)
+            if len(seeds) == n_buckets:
+                break
+ 
+        warmup = list(seeds.values())
+        results.extend(await asyncio.gather(*[_make_task(e) for e in warmup]))
+ 
+        warm_ids = {e["id"] for e in warmup}
+        remaining = [e for e in prompts if e["id"] not in warm_ids]
+ 
+    if remaining:
+        results.extend(await asyncio.gather(*[_make_task(e) for e in remaining]))
+ 
+    extractions = [r for r, _, _ in results if r is not None]
+    errors = [e for _, e, _ in results if e is not None]
+    usages = [u for _, _, u in results if u is not None]
+ 
+    _log_cache_stats(usages)
+ 
     return extractions, errors
-
-
+ 
+ 
 async def _extract_record(
     semaphore: asyncio.Semaphore,
     client: AsyncOpenAI,
@@ -217,9 +313,14 @@ async def _extract_record(
     model: str,
     schema: dict,
     service_tier: str,
-) -> tuple[BaseModel | None, dict | None]:
+    prompt_cache_key: str,
+) -> tuple[BaseModel | None, dict | None, dict | None]:
     """Call the Responses API for a single record.
-
+ 
+    Returns ``(extraction, error, usage)``, of which at most one of the first two
+    is non-None. ``usage`` is populated on success and carries the token counts
+    needed to verify prompt caching.
+ 
     Transient errors (408 timeout, rate-limit 429, 5xx) are retried
     automatically by OpenAI.
     One custom layer is added on top: when ``service_tier="flex"`` and the API
@@ -230,7 +331,7 @@ async def _extract_record(
     # If flex is requested, try flex first then fall back to auto on capacity
     # shortage. For any other tier, there is only one attempt.
     tiers_to_try = ["flex", "auto"] if service_tier == "flex" else [service_tier]
-
+ 
     for tier in tiers_to_try:
         try:
             async with semaphore:
@@ -247,14 +348,16 @@ async def _extract_record(
                         }
                     },
                     service_tier=tier,
+                    prompt_cache_key=prompt_cache_key,
                     store=False,  # extractions are stateless; no persistence needed
                 )
-
+ 
             extraction = model_cls.model_validate_json(response.output_text)
             if hasattr(extraction, "id"):
                 extraction.id = entry["id"]
-            return extraction, None
-
+ 
+            return extraction, None, _usage_from(response, entry["id"])
+ 
         except APIStatusError as e:
             # Distinguish flex capacity shortage from ordinary rate-limit 429s.
             # Only the former warrants a tier fallback; the latter is already
@@ -268,44 +371,79 @@ async def _extract_record(
                     entry["id"],
                 )
                 continue  # move to "auto"
-
-            return None, {
-                "id": entry["id"],
-                "error": str(e),
-                "error_type": type(e).__name__,
-                "error_message": str(e),
-                "status_code": e.status_code,
-            }
-
+ 
+            return (
+                None,
+                {
+                    "id": entry["id"],
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                    "error_message": str(e),
+                    "status_code": e.status_code,
+                },
+                None,
+            )
+ 
         except Exception as e:
-            return None, {
-                "id": entry["id"],
-                "error": str(e),
-                "error_type": type(e).__name__,
-                "error_message": str(e) or repr(e),
-                "error_traceback": traceback.format_exc(),
-            }
-
+            return (
+                None,
+                {
+                    "id": entry["id"],
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                    "error_message": str(e) or repr(e),
+                    "error_traceback": traceback.format_exc(),
+                },
+                None,
+            )
+ 
     # Unreachable in normal flow; guards against future loop changes.
-    return None, {
-        "id": entry["id"],
-        "error": "all service tiers exhausted without a result",
-        "error_type": "ServiceTierExhausted",
-        "error_message": "Request failed on both flex and auto tiers.",
+    return (
+        None,
+        {
+            "id": entry["id"],
+            "error": "all service tiers exhausted without a result",
+            "error_type": "ServiceTierExhausted",
+            "error_message": "Request failed on both flex and auto tiers.",
+        },
+        None,
+    )
+ 
+ 
+def _usage_from(response: object, entry_id: str) -> dict | None:
+    """Pull token counts, including cached_tokens, off a Responses API response.
+ 
+    The Responses API exposes cached_tokens under ``usage.input_tokens_details``
+    (Chat Completions puts it under ``usage.prompt_tokens_details``). Guarded so
+    that an SDK change to the usage block degrades the cache log rather than
+    failing the extraction.
+    """
+    usage = getattr(response, "usage", None)
+    if usage is None:
+        return None
+ 
+    details = getattr(usage, "input_tokens_details", None)
+    cached = getattr(details, "cached_tokens", 0) or 0
+ 
+    return {
+        "id": entry_id,
+        "input_tokens": getattr(usage, "input_tokens", 0) or 0,
+        "cached_tokens": cached,
+        "output_tokens": getattr(usage, "output_tokens", 0) or 0,
     }
-
-
+ 
+ 
 def _extractions_to_df(extractions: Sequence[BaseModel]) -> pl.DataFrame:
     """Serialise a list of Pydantic model instances into a Polars DataFrame.
-
+ 
     Nested structures (lists of models) are preserved as typed
     ``pl.List(pl.Struct(...))`` columns for native Parquet round-trip.
     """
     if not extractions:
         return pl.DataFrame()
     return pl.from_dicts([ext.model_dump() for ext in extractions])
-
-
+ 
+ 
 def write_batch_files(
     prompts: list[dict],
     system_prompt_path: str,
@@ -316,7 +454,7 @@ def write_batch_files(
     model: str = "gpt-4.1-mini",
 ) -> None:
     """Prepare batches of JSON lines to submit to the OpenAI Batch API.
-
+ 
     Args:
         prompts (list[dict]): Preformed prompts with the query (e.g., the output of `data_sources.aact.llm_extractor.build_prompts`)
         system_prompt_path (str): Path to the system prompt file
@@ -326,25 +464,30 @@ def write_batch_files(
         service_tier (str): Service tier for the OpenAI Batch API (e.g., 'flex', 'auto')
         model (str): Model to use for the OpenAI Batch API (default: 'gpt-4.1-mini')
     """
-
+ 
     def _iter_chunks(items: list[dict], chunk_size: int):
         for i in range(0, len(items), chunk_size):
             yield i // chunk_size, items[i : i + chunk_size]
-
+ 
     system_prompt = Path(system_prompt_path).read_text(encoding="utf-8")
     model_cls = _import_class(model_class)
     schema = _patch_schema(model_cls.model_json_schema(by_alias=True))
-
+ 
+    # Same cache-key scheme as the sync path: caching stacks with the Batch API,
+    # so the constant prefix is not billed at full price on every request.
+    fingerprint = _prefix_fingerprint(system_prompt, schema, model)
+ 
     out_dir.mkdir(parents=True, exist_ok=True)
-
+ 
     manifest: dict[str, object] = {
         "model": model,
         "endpoint": "/v1/responses",
         "total_requests": len(prompts),
         "batch_size": batch_size,
+        "prompt_cache_key": fingerprint,
         "files": [],
     }
-
+ 
     for idx, chunk in _iter_chunks(prompts, batch_size):  # TODO: make it GCSFS friendly
         out_file = out_dir / f"responses_batch_{idx:04d}.jsonl"
         with out_file.open("w", encoding="utf-8") as handle:
@@ -366,11 +509,12 @@ def write_batch_files(
                             }
                         },
                         "service_tier": service_tier,
+                        "prompt_cache_key": fingerprint,
                         "store": False,
                     },
                 }
                 handle.write(json.dumps(request_line, ensure_ascii=False) + "\n")
-
+ 
         file_size = out_file.stat().st_size
         if file_size > 200 * 1024 * 1024:
             logger.warning(
@@ -378,7 +522,7 @@ def write_batch_files(
                 out_file,
                 file_size,
             )
-
+ 
         manifest_files = manifest["files"]
         assert isinstance(manifest_files, list)
         manifest_files.append(
@@ -388,7 +532,7 @@ def write_batch_files(
                 "bytes": file_size,
             }
         )
-
+ 
     (out_dir / "manifest.json").write_text(
         json.dumps(manifest, indent=2), encoding="utf-8"
     )
