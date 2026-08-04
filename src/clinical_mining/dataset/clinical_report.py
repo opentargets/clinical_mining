@@ -157,10 +157,12 @@ class ClinicalReport:
         df = self.drop_duplicates(df)
 
         df = df.with_columns(
-            # Apply sanitise_text to all string columns
+            # Apply sanitise_text to all top-level string columns. Strings nested
+            # inside structs or lists (drugs, diseases, sideEffects, countries) are
+            # not reached by `pl.col(pl.String)`; those originate from the LLM output
+            # and are already sanitised by `sanitise_nested` when the batch results are parsed.
             pl.col(pl.String).map_elements(sanitise_text, return_dtype=pl.String)
         )
-
         self.df = validate_schema(df, ClinicalReportSchema)
 
     def pipe(self, func: callable, *args, **kwargs) -> "ClinicalReport":
