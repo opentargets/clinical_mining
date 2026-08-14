@@ -253,3 +253,41 @@ def test_extract_clinical_report_with_sponsors():
         "trialSponsor"
     ].to_list()[0]
     assert trial_sponsor_nct0001 == {"agencyClass": "INDUSTRY", "name": "Sponsor A"}
+
+
+def test_extract_clinical_report_with_study_references():
+    from clinical_mining.data_sources.aact import extract_clinical_report
+
+    study_references = pl.DataFrame(
+        {
+            "nct_id": ["NCT0001", "NCT0001", "NCT0001", "NCT0002"],
+            "pmid": [12345678, 99999999, 12345678, 11111111],
+            "reference_type": ["result", "background", "result", "result"],
+        }
+    )
+
+    aggregation_specs = {
+        "study_references": {
+            "group_by": "nct_id",
+            "alias": "literature",
+            "struct": {
+                "id": "pmid",
+                "type": "reference_type",
+            },
+            "agg": "unique",
+        }
+    }
+
+    result = extract_clinical_report(
+        studies=_make_studies(),
+        interventions=_make_interventions(),
+        conditions=_make_conditions(),
+        additional_metadata=[study_references],
+        aggregation_specs=aggregation_specs,
+    )
+
+    assert "trialLiterature" in result.df.columns
+    assert sorted(result.df["trialLiterature"].to_list()[0], key=lambda x: x["id"]) == [
+        {"id": "12345678", "type": "result"},
+        {"id": "99999999", "type": "background"},
+    ]

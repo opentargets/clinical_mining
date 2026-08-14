@@ -134,7 +134,7 @@ def extract_clinical_report(
                         if all(col in metadata_df.columns for col in struct_cols):
                             struct_expr = pl.struct(
                                 [
-                                    pl.col(str(col)).alias(str(field))
+                                    pl.col(str(col)).cast(pl.String).alias(str(field))
                                     for field, col in spec["struct"].items()
                                 ]
                             )
