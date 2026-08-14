@@ -68,9 +68,13 @@ workflow:
           conditions: $conditions
           additional_metadata: [$brief_summaries, $study_references, $detailed_descriptions]
           aggregation_specs:
-            pmid:
+            study_references:
               group_by: nct_id
               alias: literature
+              struct:
+                id: pmid
+                type: reference_type
+              agg: unique
 
     generate:
       filtered_report:
