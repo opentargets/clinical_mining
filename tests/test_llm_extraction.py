@@ -456,3 +456,107 @@ class TestParseSingleRecord:
 
         assert good is None
         assert "inner_json_error" in bad["error"]
+
+    # ── multi-item output ─────────────────────────────────────────────────────
+
+    def _message_item(self, text: str) -> dict:
+        return {
+            "id": "msg_test",
+            "type": "message",
+            "status": "completed",
+            "role": "assistant",
+            "content": [{"type": "output_text", "text": text}],
+        }
+
+    def _valid_text(self) -> str:
+        return json.loads(self.SAMPLE_LINE)["response"]["body"]["output"][0]["content"][
+            0
+        ]["text"]
+
+    def test_single_output_item_still_parses(self):
+        """A record with one output item is unaffected by the fallback."""
+        outer = json.loads(self.SAMPLE_LINE)
+        assert len(outer["response"]["body"]["output"]) == 1
+
+        good, bad = _parse_single_record(outer)
+
+        assert bad is None
+        assert good.id == "nct00031889"
+        assert len(good.investigated_drugs) == 2
+
+    def test_truncated_first_item_falls_back_to_continuation(self):
+        """A cut-off first item must not discard the complete later payload."""
+        text = self._valid_text()
+        outer = json.loads(self.SAMPLE_LINE)
+        outer["response"]["body"]["output"] = [
+            self._message_item(text[:287]),  # unterminated string
+            self._message_item(text),
+        ]
+
+        good, bad = _parse_single_record(outer)
+
+        assert bad is None
+        assert good.id == "nct00031889"
+        assert good.drug_intent == "therapeutic"
+        assert {d.drug for d in good.investigated_drugs} == {
+            "exemestane",
+            "bicalutamide",
+        }
+
+    def test_multiple_texts_within_one_item_are_candidates(self):
+        """Fragments split across content entries of a single item also count."""
+        text = self._valid_text()
+        outer = json.loads(self.SAMPLE_LINE)
+        outer["response"]["body"]["output"][0]["content"] = [
+            {"type": "output_text", "text": text[:287]},
+            {"type": "output_text", "text": text},
+        ]
+
+        good, bad = _parse_single_record(outer)
+
+        assert bad is None
+        assert good.id == "nct00031889"
+
+    def test_no_valid_payload_anywhere_returns_bad_record(self):
+        """Every fragment truncated → still a bad record, with the same error."""
+        text = self._valid_text()
+        outer = json.loads(self.SAMPLE_LINE)
+        outer["response"]["body"]["output"] = [
+            self._message_item(text[:287]),
+            self._message_item(text[:412]),
+        ]
+
+        good, bad = _parse_single_record(outer)
+
+        assert good is None
+        assert bad["id"] == "nct00031889"
+        assert "inner_json_error" in bad["error"]
+
+    def test_non_message_output_item_is_skipped(self):
+        """Only items of type 'message' are considered."""
+        text = self._valid_text()
+        outer = json.loads(self.SAMPLE_LINE)
+        outer["response"]["body"]["output"] = [
+            {
+                "id": "rs_test",
+                "type": "reasoning",
+                "content": [{"type": "reasoning_text", "text": "{not valid json"}],
+            },
+            self._message_item(text),
+        ]
+
+        good, bad = _parse_single_record(outer)
+
+        assert bad is None
+        assert good.id == "nct00031889"
+
+    def test_only_non_message_items_returns_missing_text_path(self):
+        outer = json.loads(self.SAMPLE_LINE)
+        outer["response"]["body"]["output"] = [
+            {"id": "rs_test", "type": "reasoning", "content": []},
+        ]
+
+        good, bad = _parse_single_record(outer)
+
+        assert good is None
+        assert "missing_text_path" in bad["error"]
