@@ -30,25 +30,29 @@ def extract_clinical_report(
         drug_warning.join(molecule_dictionary, "molregno")
         .join(warning_refs, "warning_id")
         .select(
-            pl.concat_str(
+            id=pl.concat_str(
                 # One reference can report multiple withdrawals
                 pl.col("ref_id"),
                 pl.col("chembl_id"),
             ).chash.sha2_256(),
-            phaseFromSource=pl.col("warning_type")
-            .str.to_lowercase()
-            .alias("phaseFromSource"),
+            phaseFromSource=pl.col("warning_type").str.to_lowercase(),
             type=pl.lit(ClinicalReportType.SAFETY.value),
-            origin=pl.when(pl.col("ref_type").str == ClinicalSource.DailyMed.value)
+            origin=pl.when(pl.col("ref_type") == ClinicalSource.DailyMed.value)
             .then(pl.lit(ClinicalReportOrigin.DRUG_LABEL.value))
             .when(
-                pl.col("ref_type").str.is_in(
+                pl.col("ref_type").is_in(
                     [ClinicalSource.FDA.value, ClinicalSource.EMA.value]
                 )
             )
             .then(pl.lit(ClinicalReportOrigin.REGULATORY.value))
-            .otherwise(pl.lit(ClinicalReportOrigin.OTHER.value)),
-            sideEffect=(
+            .otherwise(pl.lit(ClinicalReportOrigin.CURATED_RESOURCE.value)),
+            # Avoid null objects in sideEffects
+            sideEffect=pl.when(
+                pl.any_horizontal(
+                    pl.coalesce("efo_id", "efo_id_for_warning_class").is_not_null(),
+                    pl.coalesce("efo_term", "warning_class").is_not_null(),
+                )
+            ).then(
                 pl.struct(
                     pl.coalesce(
                         pl.col("efo_id"),
@@ -61,12 +65,6 @@ def extract_clinical_report(
                         pl.col("warning_class"),
                     ).alias("diseaseFromSource"),
                 )
-                .str.replace(":", "_")
-                .alias("diseaseId"),
-                pl.coalesce(
-                    pl.col("efo_term"),
-                    pl.col("warning_class"),
-                ).alias("diseaseFromSource"),
             ),
             drug=pl.struct(
                 pl.col("pref_name").alias("drugFromSource"),
@@ -84,9 +82,15 @@ def extract_clinical_report(
         df=(
             reports.group_by(
                 [c for c in reports.columns if c not in ["sideEffect", "drug"]]
-            ).agg(
-                pl.col("sideEffect").unique().alias("sideEffects"),
+            )
+            .agg(
+                pl.col("sideEffect").drop_nulls().unique().alias("sideEffects"),
                 pl.col("drug").unique().alias("drugs"),
+            )
+            .with_columns(
+                pl.when(pl.col("sideEffects").list.len() > 0).then(
+                    pl.col("sideEffects")
+                )
             )
         )
     )

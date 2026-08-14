@@ -15,6 +15,7 @@ from clinical_mining.schemas import (
     ExtractedDisease,
     ExtractedDrug,
 )
+from clinical_mining.utils.text_cleaning import sanitise_nested
 from clinical_mining.workflows.llm import _extractions_to_df
 
 
@@ -165,10 +166,30 @@ def _normalise_drug_list(items: list | None) -> list[dict]:
     return [_normalise_drug(x) for x in items if isinstance(x, dict)]
 
 
+def _message_texts(outer: dict) -> list[str]:
+    """Collect every text payload carried by a batch envelope.
+
+    The batch API can split one response across several ``output`` items, a
+    truncated fragment followed by a continuation, so ``output[0]`` is not
+    reliably the complete payload. Every ``message`` item is walked, in order,
+    and every text content entry is returned as a candidate.
+    """
+    return [
+        content["text"]
+        for item in outer["response"]["body"]["output"]
+        if item.get("type") == "message"
+        for content in (item.get("content") or [])
+        if "text" in content
+    ]
+
+
 def _parse_single_record(
     outer: dict, path: str = "<test>", row_idx: int = 0
 ) -> tuple[ClinicalReportExtractionSchema | None, dict | None]:
     """Parse a single decoded JSONL envelope into a typed extraction object.
+
+    The first candidate payload that decodes to a JSON object wins; a record is
+    only rejected when none of them does.
 
     Returns (ClinicalReportExtractionSchema, None) on success,
     (None, bad_record_dict) on failure.
@@ -176,7 +197,9 @@ def _parse_single_record(
     record_id = outer.get("custom_id", "")
 
     try:
-        text = outer["response"]["body"]["output"][0]["content"][0]["text"]
+        texts = _message_texts(outer)
+        if not texts:
+            raise ValueError("no message output with text content")
     except Exception as e:
         return None, {
             "file": path,
@@ -185,14 +208,27 @@ def _parse_single_record(
             "error": f"missing_text_path: {e}",
         }
 
-    try:
-        payload = json.loads(text)
-    except json.JSONDecodeError as e:
+    payload = None
+    last_error: Exception | None = None
+    for text in texts:
+        try:
+            candidate = sanitise_nested(json.loads(text))
+        except json.JSONDecodeError as e:
+            last_error = e
+            continue
+        if isinstance(candidate, dict):
+            payload = candidate
+            break
+        last_error = ValueError(
+            f"expected a JSON object, got {type(candidate).__name__}"
+        )
+
+    if payload is None:
         return None, {
             "file": path,
             "row_idx": row_idx,
             "id": record_id,
-            "error": f"inner_json_error: {e}",
+            "error": f"inner_json_error: {last_error}",
         }
 
     try:

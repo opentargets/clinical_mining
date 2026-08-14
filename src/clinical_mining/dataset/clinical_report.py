@@ -9,6 +9,7 @@ from clinical_mining.schemas import (
     validate_schema,
 )
 from clinical_mining.utils.mapping import map_entities
+from clinical_mining.utils.text_cleaning import sanitise_text
 
 # Clinical status harmonization constants
 PHASE_TO_CATEGORY_MAP = {
@@ -155,6 +156,13 @@ class ClinicalReport:
         # Drop duplicates by id, keeping the row with the best clinical stage
         df = self.drop_duplicates(df)
 
+        df = df.with_columns(
+            # Apply sanitise_text to all top-level string columns. Strings nested
+            # inside structs or lists (drugs, diseases, sideEffects, countries) are
+            # not reached by `pl.col(pl.String)`; those originate from the LLM output
+            # and are already sanitised by `sanitise_nested` when the batch results are parsed.
+            pl.col(pl.String).map_elements(sanitise_text, return_dtype=pl.String)
+        )
         self.df = validate_schema(df, ClinicalReportSchema)
 
     def pipe(self, func: callable, *args, **kwargs) -> "ClinicalReport":
@@ -215,8 +223,19 @@ class ClinicalReport:
 
         mapped_reports = (
             mapped_exploded_reports.with_columns(
-                disease=pl.struct(pl.col("diseaseFromSource"), pl.col("diseaseId")),
-                drug=pl.struct(pl.col("drugFromSource"), pl.col("drugId")),
+                # # Avoid null objects in `disease` and `drug`
+                disease=pl.when(
+                    pl.any_horizontal(
+                        pl.col("diseaseFromSource").is_not_null(),
+                        pl.col("diseaseId").is_not_null(),
+                    )
+                ).then(pl.struct(pl.col("diseaseFromSource"), pl.col("diseaseId"))),
+                drug=pl.when(
+                    pl.any_horizontal(
+                        pl.col("drugFromSource").is_not_null(),
+                        pl.col("drugId").is_not_null(),
+                    )
+                ).then(pl.struct(pl.col("drugFromSource"), pl.col("drugId"))),
             )
             .drop(["diseaseFromSource", "drugFromSource", "diseaseId", "drugId"])
             .unique()
@@ -226,9 +245,14 @@ class ClinicalReport:
             df=(
                 mapped_reports.group_by(
                     [c for c in mapped_reports.columns if c not in ["disease", "drug"]]
-                ).agg(
-                    pl.col("disease").unique().alias("diseases"),
-                    pl.col("drug").unique().alias("drugs"),
+                )
+                .agg(
+                    pl.col("disease").drop_nulls().unique().alias("diseases"),
+                    pl.col("drug").drop_nulls().unique().alias("drugs"),
+                )
+                .with_columns(
+                    pl.when(pl.col(c).list.len() > 0).then(pl.col(c))
+                    for c in ["diseases", "drugs"]
                 )
             )
         )

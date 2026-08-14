@@ -3,6 +3,7 @@
 from typing import Any
 
 import polars as pl
+from omegaconf import DictConfig
 
 from clinical_mining.dataset import ClinicalReport
 from clinical_mining.schemas import (
@@ -130,7 +131,9 @@ def extract_clinical_report(
         for metadata_df in additional_metadata:
             if aggregation_specs:
                 for key, spec in aggregation_specs.items():
-                    if "struct" in spec and isinstance(spec["struct"], dict):
+                    if "struct" in spec and isinstance(
+                        spec["struct"], (dict, DictConfig)
+                    ):
                         struct_cols = list(spec["struct"].values())
                         if all(col in metadata_df.columns for col in struct_cols):
                             struct_expr = pl.struct(

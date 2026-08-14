@@ -161,7 +161,7 @@ workflow:
           df: $sponsors
           expr: "lead_or_collaborator == 'lead'"
       
-      defailed_descriptions_rename:
+      detailed_descriptions_rename:
         function: clinical_mining.utils.polars_helpers.rename_columns
         parameters:
           df: $detailed_descriptions
