@@ -35,18 +35,28 @@ def extract_clinical_report(
             .alias("id"),
             pl.col("warning_type").str.to_lowercase().alias("phaseFromSource"),
             pl.lit(ClinicalReportType.CURATED_RESOURCE).alias("type"),
-            pl.struct(
-                pl.coalesce(
-                    pl.col("efo_id"),
-                    pl.col("efo_id_for_warning_class"),
+            # Avoid null objects in sideEffects
+            pl.when(
+                pl.any_horizontal(
+                    pl.coalesce("efo_id", "efo_id_for_warning_class").is_not_null(),
+                    pl.coalesce("efo_term", "warning_class").is_not_null(),
                 )
-                .str.replace(":", "_")
-                .alias("diseaseId"),
-                pl.coalesce(
-                    pl.col("efo_term"),
-                    pl.col("warning_class"),
-                ).alias("diseaseFromSource"),
-            ).alias("sideEffect"),
+            )
+            .then(
+                pl.struct(
+                    pl.coalesce(
+                        pl.col("efo_id"),
+                        pl.col("efo_id_for_warning_class"),
+                    )
+                    .str.replace(":", "_")
+                    .alias("diseaseId"),
+                    pl.coalesce(
+                        pl.col("efo_term"),
+                        pl.col("warning_class"),
+                    ).alias("diseaseFromSource"),
+                )
+            )
+            .alias("sideEffect"),
             pl.struct(
                 pl.col("pref_name").alias("drugFromSource"),
                 pl.col("chembl_id").alias("drugId"),
@@ -64,9 +74,15 @@ def extract_clinical_report(
         df=(
             reports.group_by(
                 [c for c in reports.columns if c not in ["sideEffect", "drug"]]
-            ).agg(
-                pl.col("sideEffect").unique().alias("sideEffects"),
+            )
+            .agg(
+                pl.col("sideEffect").drop_nulls().unique().alias("sideEffects"),
                 pl.col("drug").unique().alias("drugs"),
+            )
+            .with_columns(
+                pl.when(pl.col("sideEffects").list.len() > 0).then(
+                    pl.col("sideEffects")
+                )
             )
         )
     )

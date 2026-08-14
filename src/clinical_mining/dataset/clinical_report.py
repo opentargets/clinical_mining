@@ -223,8 +223,19 @@ class ClinicalReport:
 
         mapped_reports = (
             mapped_exploded_reports.with_columns(
-                disease=pl.struct(pl.col("diseaseFromSource"), pl.col("diseaseId")),
-                drug=pl.struct(pl.col("drugFromSource"), pl.col("drugId")),
+                # # Avoid null objects in `disease` and `drug`
+                disease=pl.when(
+                    pl.any_horizontal(
+                        pl.col("diseaseFromSource").is_not_null(),
+                        pl.col("diseaseId").is_not_null(),
+                    )
+                ).then(pl.struct(pl.col("diseaseFromSource"), pl.col("diseaseId"))),
+                drug=pl.when(
+                    pl.any_horizontal(
+                        pl.col("drugFromSource").is_not_null(),
+                        pl.col("drugId").is_not_null(),
+                    )
+                ).then(pl.struct(pl.col("drugFromSource"), pl.col("drugId"))),
             )
             .drop(["diseaseFromSource", "drugFromSource", "diseaseId", "drugId"])
             .unique()
@@ -234,9 +245,14 @@ class ClinicalReport:
             df=(
                 mapped_reports.group_by(
                     [c for c in mapped_reports.columns if c not in ["disease", "drug"]]
-                ).agg(
-                    pl.col("disease").unique().alias("diseases"),
-                    pl.col("drug").unique().alias("drugs"),
+                )
+                .agg(
+                    pl.col("disease").drop_nulls().unique().alias("diseases"),
+                    pl.col("drug").drop_nulls().unique().alias("drugs"),
+                )
+                .with_columns(
+                    pl.when(pl.col(c).list.len() > 0).then(pl.col(c))
+                    for c in ["diseases", "drugs"]
                 )
             )
         )
