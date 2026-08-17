@@ -13,10 +13,7 @@ def _make_studies() -> pl.DataFrame:
             "number_of_arms": [2],
             "official_title": ["A Study"],
         }
-    )
-
-
-def _make_interventions() -> pl.DataFrame:
+    )def _make_interventions() -> pl.DataFrame:
     return pl.DataFrame(
         {
             "nct_id": ["NCT0001"],
@@ -253,3 +250,31 @@ def test_extract_clinical_report_with_sponsors():
         "trialSponsor"
     ].to_list()[0]
     assert trial_sponsor_nct0001 == {"agencyClass": "INDUSTRY", "name": "Sponsor A"}
+
+
+def test_year_from_start_date():
+    from clinical_mining.data_sources.aact import extract_clinical_report
+
+    from datetime import date
+
+    studies = pl.DataFrame(
+        {
+            "nct_id": ["NCT0001", "NCT0002"],
+            "overall_status": ["COMPLETED", "COMPLETED"],
+            "phase": ["PHASE2", "PHASE3"],
+            "study_type": ["INTERVENTIONAL", "INTERVENTIONAL"],
+            "start_date": [date(2019, 5, 1), None],
+            "why_stopped": [None, None],
+            "number_of_arms": [2, 2],
+            "official_title": ["A Study", "B Study"],
+        }
+    )
+
+    result = extract_clinical_report(
+        studies=studies,
+        interventions=_make_interventions(),
+        conditions=_make_conditions(),
+    )
+
+    by_id = result.df.select("id", "year").sort("id").to_dict(as_series=False)
+    assert by_id["year"] == [2019, None]
