@@ -153,7 +153,7 @@ def find_column_structure(header_row: list) -> ColumnStructure:
 
         cell_lower = str(cell).lower()
 
-        if "approval date" in cell_lower:
+        if "approval" in cell_lower and "date" in cell_lower:
             structure.approval_date_idx = idx
         elif "brand name" in cell_lower:
             structure.brand_name_idx = idx
