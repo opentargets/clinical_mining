@@ -13,7 +13,10 @@ def _make_studies() -> pl.DataFrame:
             "number_of_arms": [2],
             "official_title": ["A Study"],
         }
-    )def _make_interventions() -> pl.DataFrame:
+    )
+
+
+def _make_interventions() -> pl.DataFrame:
     return pl.DataFrame(
         {
             "nct_id": ["NCT0001"],
@@ -253,9 +256,9 @@ def test_extract_clinical_report_with_sponsors():
 
 
 def test_year_from_start_date():
-    from clinical_mining.data_sources.aact import extract_clinical_report
-
     from datetime import date
+
+    from clinical_mining.data_sources.aact import extract_clinical_report
 
     studies = pl.DataFrame(
         {
@@ -270,10 +273,23 @@ def test_year_from_start_date():
         }
     )
 
+    interventions = pl.DataFrame(
+        {
+            "nct_id": ["NCT0001", "NCT0002"],
+            "intervention_type": ["DRUG", "DRUG"],
+            "name": ["Aspirin", "Metformin"],
+        }
+    )
+    conditions = pl.DataFrame(
+        {
+            "nct_id": ["NCT0001", "NCT0002"],
+            "downcase_name": ["headache", "diabetes"],
+        }
+    )
     result = extract_clinical_report(
         studies=studies,
-        interventions=_make_interventions(),
-        conditions=_make_conditions(),
+        interventions=interventions,
+        conditions=conditions,
     )
 
     by_id = result.df.select("id", "year").sort("id").to_dict(as_series=False)
