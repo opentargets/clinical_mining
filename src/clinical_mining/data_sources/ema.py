@@ -10,6 +10,21 @@ from clinical_mining.schemas import ClinicalReportType
 from clinical_mining.utils.polars_helpers import convert_polars_to_spark
 
 
+def extract_marketing_year(marketing_date: str | None) -> int | None:
+    """Extract the year from an EMA marketing authorisation date (``dd/mm/yyyy``)."""
+    if not marketing_date:
+        return None
+    try:
+        return (
+            pl.Series([marketing_date])
+            .str.to_datetime(format="%d/%m/%Y", strict=False)
+            .dt.year()
+            .item()
+        )
+    except ValueError:
+        return None
+
+
 def extract_clinical_report(
     ema_input: str | BytesIO | pl.DataFrame,
     spark: SparkSession,
@@ -81,7 +96,9 @@ def extract_clinical_report(
             source=pl.lit("EMA Human Drugs"),
             url=pl.col("Medicine URL"),
             hasExpertReview=pl.lit(False),
-            # TODO: Marketing date
+            year=pl.col("Marketing authorisation date").map_elements(
+                extract_marketing_year, return_dtype=pl.Int32
+            ),
         )
         .explode("drugFromSource")
         .explode("diseaseFromSource")
