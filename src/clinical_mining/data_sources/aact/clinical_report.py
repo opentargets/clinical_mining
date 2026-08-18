@@ -184,7 +184,6 @@ def extract_clinical_report(
             hasExpertReview=pl.lit(False),
             type=pl.lit(ClinicalReportType.CLINICAL_TRIAL),
             phaseFromSource=pl.col("trial_phase"),
-            year=pl.col("trial_start_date").cast(pl.Date).dt.year(),
             disease=pl.struct(
                 pl.lit(None, dtype=pl.String).alias("diseaseId"),
                 pl.col("diseaseFromSource"),
