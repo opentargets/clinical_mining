@@ -180,7 +180,8 @@ def extract_clinical_report(
             .otherwise(pl.lit(None))
         )
         .with_columns(
-            source=pl.lit(ClinicalSource.AACT.value),
+            source=pl.lit(ClinicalSource.CLINICAL_TRIALS_GOV.value),
+            provider=pl.lit("AACT"),
             type=pl.lit(ClinicalReportType.INDICATION.value),
             url=pl.concat_str(
                 [pl.lit("https://clinicaltrials.gov/study/"), pl.col("id")],

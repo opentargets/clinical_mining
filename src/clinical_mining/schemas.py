@@ -38,14 +38,15 @@ def snake_to_camel(snake_str: str) -> str:
 class ClinicalSource(str, Enum):
     """The data source of the evidence."""
 
-    AACT = "AACT"
+    CLINICAL_TRIALS_GOV = "ClinicalTrials.gov"
     USAN = "USAN"
     EMA = "EMA"
     ATC = "ATC"
     INN = "INN"
+
     DailyMed = "DailyMed"
     FDA = "FDA"
-    EMA_Human_Drugs = "EMA Human Drugs"
+    EMA_HUMAN_DRUGS = "EMA Human Drugs"
     TTD = "TTD"
     PMDA = "PMDA"
 

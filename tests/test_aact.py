@@ -35,6 +35,19 @@ def _make_conditions() -> pl.DataFrame:
     )
 
 
+def test_source_and_provider():
+    from clinical_mining.data_sources.aact import extract_clinical_report
+
+    result = extract_clinical_report(
+        studies=_make_studies(),
+        interventions=_make_interventions(),
+        conditions=_make_conditions(),
+    )
+
+    assert result.df["source"].to_list() == ["ClinicalTrials.gov"]
+    assert result.df["provider"].to_list() == ["AACT"]
+
+
 def test_detailed_descriptions_column_present():
     from clinical_mining.data_sources.aact import extract_clinical_report
 
