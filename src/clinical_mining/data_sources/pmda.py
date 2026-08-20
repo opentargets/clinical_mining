@@ -410,6 +410,7 @@ def extract_clinical_report(
             ),
             type=pl.lit(ClinicalReportType.INDICATION.value),
             source=pl.lit("PMDA"),
+            provider=pl.lit("PMDA"),
         )
         .with_columns(
             id=plh.concat_str(
