@@ -153,7 +153,7 @@ def find_column_structure(header_row: list) -> ColumnStructure:
 
         cell_lower = str(cell).lower()
 
-        if "approval date" in cell_lower:
+        if "approval" in cell_lower and "date" in cell_lower:
             structure.approval_date_idx = idx
         elif "brand name" in cell_lower:
             structure.brand_name_idx = idx
@@ -223,6 +223,25 @@ def is_approval_row(approval_value: str, has_approval_column: bool) -> bool:
         return True
 
     return False
+
+
+def extract_approval_year(approval_date: str | None) -> int | None:
+    """Extract the year from a PMDA approval date.
+
+    Handles the formats seen in the PMDA PDF, e.g. ``Sep. 24, 2024``,
+    ``May 7, 2020``, ``20-Apr-06`` and multi-date entries like
+    ``(1) Aug. 21, 2018 (2) Aug. 22, 2018``.
+    """
+    if not approval_date:
+        return None
+
+    if match := re.search(r"(1[89]\d\d|20\d\d)", approval_date):
+        return int(match.group(1))
+
+    if match := re.search(r"-(\d\d)\b", approval_date):
+        return int(match.group(1)) + 2000
+
+    return None
 
 
 # ============================================================================
@@ -371,6 +390,9 @@ def extract_clinical_report(
         )
         .select(
             phaseFromSource=pl.lit("approval"),
+            year=pl.col("approval_date").map_elements(
+                extract_approval_year, return_dtype=pl.Int32
+            ),
             origin=pl.lit(ClinicalReportOrigin.REGULATORY),
             drug=pl.struct(
                 pl.col("active_ingredients")
