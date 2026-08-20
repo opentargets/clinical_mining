@@ -67,7 +67,7 @@ def extract_clinical_report(
         id=pl.concat_str(
             [pl.col("ttd_id"), pl.lit("/"), pl.col("diseaseFromSource")]
         ).str.to_lowercase(),
-        origin=pl.lit(ClinicalReportOrigin.OTHER),
+        origin=pl.lit(ClinicalReportOrigin.CURATED_RESOURCE),
         url=pl.concat_str(
             [pl.lit("https://ttd.idrblab.cn/data/drug/details/"), pl.col("ttd_id")]
         ),
@@ -82,6 +82,7 @@ def extract_clinical_report(
         ),
         type=pl.lit(ClinicalReportType.INDICATION.value),
         source=pl.lit("TTD"),
+        provider=pl.lit("TTD"),
     ).unique()
 
     return ClinicalReport(
