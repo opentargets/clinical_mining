@@ -78,6 +78,35 @@ class MappingStatus(str, Enum):
     UNMAPPED = "UNMAPPED"
 
 
+class ClinicalProvider(str, Enum):
+    """The resource or organisation that distributes data fetched from a primary source."""
+
+    AACT = "AACT"
+    CHEMBL = "ChEMBL"
+    EMA = "EMA"
+    PMDA = "PMDA"
+    TTD = "TTD"
+
+    @classmethod
+    def owns_source(cls, provider: str, source: str) -> bool:
+        """Return True if the provider distributes the source as its own first-party data.
+
+        Examples:
+            >>> ClinicalProvider.owns_source("EMA", "EMA Human Drugs")
+            True
+            >>> ClinicalProvider.owns_source("ChEMBL", "EMA")
+            False
+        """
+        owned: dict[str, set[str]] = {
+            cls.AACT.value: {ClinicalSource.CLINICAL_TRIALS_GOV.value},
+            cls.CHEMBL.value: set(),
+            cls.EMA.value: {ClinicalSource.EMA_HUMAN_DRUGS.value},
+            cls.PMDA.value: {ClinicalSource.PMDA.value},
+            cls.TTD.value: {ClinicalSource.TTD.value},
+        }
+        return source in owned.get(provider, set())
+
+
 class ClinicalReportOrigin(str, Enum):
     """The origin that describes the nature of the clinical record."""
 
@@ -137,7 +166,7 @@ class ClinicalReportSchema(BaseModel):
         default=None, description="The URL of the report, e.g. in Dailymed."
     )
     source: ClinicalSource = Field(description="The report primary source.")
-    provider: str = Field(
+    provider: ClinicalProvider = Field(
         description="The resource or oganisation that distributes data fetched from a primary source."
     )
     diseases: list[AssociatedDisease] | None = Field(

@@ -6,7 +6,12 @@ from ontoma.ner.disease import extract_disease_entities
 from pyspark.sql import SparkSession
 
 from clinical_mining.dataset import ClinicalReport
-from clinical_mining.schemas import ClinicalReportOrigin, ClinicalReportType
+from clinical_mining.schemas import (
+    ClinicalProvider,
+    ClinicalReportOrigin,
+    ClinicalReportType,
+    ClinicalSource,
+)
 from clinical_mining.utils.polars_helpers import convert_polars_to_spark
 
 
@@ -94,8 +99,8 @@ def extract_clinical_report(
             )
             .str.to_lowercase()
             .str.split(";"),
-            source=pl.lit("EMA Human Drugs"),
-            provider=pl.lit("EMA"),
+            source=pl.lit(ClinicalSource.EMA_HUMAN_DRUGS.value),
+            provider=pl.lit(ClinicalProvider.EMA.value),
             url=pl.col("Medicine URL"),
             year=pl.col("Marketing authorisation date").map_elements(
                 extract_marketing_year, return_dtype=pl.Int32

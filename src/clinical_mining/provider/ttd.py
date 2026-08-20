@@ -1,7 +1,12 @@
 import polars as pl
 
 from clinical_mining.dataset.clinical_report import ClinicalReport
-from clinical_mining.schemas import ClinicalReportOrigin, ClinicalReportType
+from clinical_mining.schemas import (
+    ClinicalProvider,
+    ClinicalReportOrigin,
+    ClinicalReportType,
+    ClinicalSource,
+)
 
 
 def extract_indication(ttd_input: str | list[str]) -> pl.DataFrame:
@@ -81,8 +86,8 @@ def extract_clinical_report(
             pl.col("diseaseFromSource").str.to_lowercase(),
         ),
         type=pl.lit(ClinicalReportType.INDICATION.value),
-        source=pl.lit("TTD"),
-        provider=pl.lit("TTD"),
+        source=pl.lit(ClinicalSource.TTD.value),
+        provider=pl.lit(ClinicalProvider.TTD.value),
     ).unique()
 
     return ClinicalReport(
