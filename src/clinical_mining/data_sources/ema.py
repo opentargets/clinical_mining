@@ -95,6 +95,7 @@ def extract_clinical_report(
             .str.to_lowercase()
             .str.split(";"),
             source=pl.lit("EMA Human Drugs"),
+            provider=pl.lit("EMA"),
             url=pl.col("Medicine URL"),
             year=pl.col("Marketing authorisation date").map_elements(
                 extract_marketing_year, return_dtype=pl.Int32
