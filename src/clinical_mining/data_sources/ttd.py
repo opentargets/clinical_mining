@@ -1,7 +1,7 @@
 import polars as pl
 
 from clinical_mining.dataset.clinical_report import ClinicalReport
-from clinical_mining.schemas import ClinicalReportType
+from clinical_mining.schemas import ClinicalReportOrigin, ClinicalReportType
 
 
 def extract_indication(ttd_input: str | list[str]) -> pl.DataFrame:
@@ -67,11 +67,10 @@ def extract_clinical_report(
         id=pl.concat_str(
             [pl.col("ttd_id"), pl.lit("/"), pl.col("diseaseFromSource")]
         ).str.to_lowercase(),
-        type=pl.lit(ClinicalReportType.CURATED_RESOURCE),
+        origin=pl.lit(ClinicalReportOrigin.OTHER),
         url=pl.concat_str(
             [pl.lit("https://ttd.idrblab.cn/data/drug/details/"), pl.col("ttd_id")]
         ),
-        hasExpertReview=pl.lit(True),
         phaseFromSource=pl.col("clinical_stage").str.to_lowercase(),
         drug=pl.struct(
             pl.col("drugFromSource").str.to_lowercase(),
@@ -81,6 +80,7 @@ def extract_clinical_report(
             pl.lit(None, dtype=pl.String).alias("diseaseId"),
             pl.col("diseaseFromSource").str.to_lowercase(),
         ),
+        type=pl.lit(ClinicalReportType.INDICATION.value),
         source=pl.lit("TTD"),
     ).unique()
 

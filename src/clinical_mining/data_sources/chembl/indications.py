@@ -4,7 +4,11 @@ import polars as pl
 
 from clinical_mining.dataset import ClinicalReport
 from clinical_mining.dataset.clinical_report import APPROVAL_SOURCES
-from clinical_mining.schemas import ClinicalReportType, ClinicalStageCategory
+from clinical_mining.schemas import (
+    ClinicalReportOrigin,
+    ClinicalReportType,
+    ClinicalStageCategory,
+)
 
 
 def extract_clinical_report(
@@ -34,52 +38,56 @@ def extract_clinical_report(
         .select(
             # INN references list multiple drugs, we split them so that a single report
             # corresponds to a single drug-indication pair
-            pl.when(pl.col("ref_type") == "INN")
-            .then(
-                pl.concat_str(
-                    pl.col("ref_id"),
-                    pl.lit("/"),
-                    pl.col("efo_term"),
-                    pl.lit("/"),
-                    pl.col("pref_name"),
-                ).str.split(",")
-            )
-            .otherwise(pl.col("ref_id").str.split(","))
-            .alias("id"),
-            pl.when(pl.col("ref_type").is_in(APPROVAL_SOURCES))
-            .then(pl.lit(ClinicalStageCategory.APPROVAL))
-            .when(pl.col("ref_type").is_in(["INN", "USAN"]))
-            .then(pl.lit(ClinicalStageCategory.UNKNOWN))
-            .otherwise(
-                pl.col("max_phase_for_ind").cast(pl.Float16).cast(pl.String)
-            )  # TODO: report to ChEMBL - ClinicalTrials phase won't be accurate
-            .alias("phaseFromSource"),
-            pl.when(pl.col("ref_type") == "ClinicalTrials")
-            .then(pl.lit(ClinicalReportType.CLINICAL_TRIAL))
-            .when(pl.col("ref_type") == "DailyMed")
-            .then(pl.lit(ClinicalReportType.DRUG_LABEL))
-            .when(pl.col("ref_type").is_in(["FDA", "EMA"]))
-            .then(pl.lit(ClinicalReportType.REGULATORY))
-            .otherwise(pl.lit(ClinicalReportType.CURATED_RESOURCE))
-            .alias("type"),
-            pl.when(pl.col("ref_type") == "ClinicalTrials")
-            .then(
-                pl.concat_str(
-                    pl.lit("https://clinicaltrials.gov/study/"), pl.col("ref_id")
+            id=(
+                pl.when(pl.col("ref_type") == "INN")
+                .then(
+                    pl.concat_str(
+                        pl.col("ref_id"),
+                        pl.lit("/"),
+                        pl.col("efo_term"),
+                        pl.lit("/"),
+                        pl.col("pref_name"),
+                    ).str.split(",")
                 )
-            )
-            .otherwise(pl.col("ref_url"))
-            .alias("url"),
-            pl.lit(True).alias("hasExpertReview"),
-            pl.col("ref_type").alias("source"),
-            pl.struct(
+                .otherwise(pl.col("ref_id").str.split(","))
+            ),
+            phaseFromSource=(
+                pl.when(pl.col("ref_type").is_in(APPROVAL_SOURCES))
+                .then(pl.lit(ClinicalStageCategory.APPROVAL))
+                .when(pl.col("ref_type").is_in(["INN", "USAN"]))
+                .then(pl.lit(ClinicalStageCategory.UNKNOWN))
+                .otherwise(
+                    pl.col("max_phase_for_ind").cast(pl.Float16).cast(pl.String)
+                )  # TODO: report to ChEMBL - ClinicalTrials phase won't be accurate
+            ),
+            origin=(
+                pl.when(pl.col("ref_type") == "ClinicalTrials")
+                .then(pl.lit(ClinicalReportOrigin.CLINICAL_TRIAL))
+                .when(pl.col("ref_type") == "DailyMed")
+                .then(pl.lit(ClinicalReportOrigin.DRUG_LABEL))
+                .when(pl.col("ref_type").is_in(["FDA", "EMA"]))
+                .then(pl.lit(ClinicalReportOrigin.REGULATORY))
+                .otherwise(pl.lit(ClinicalReportOrigin.CURATED_RESOURCE))
+            ),
+            url=(
+                pl.when(pl.col("ref_type") == "ClinicalTrials")
+                .then(
+                    pl.concat_str(
+                        pl.lit("https://clinicaltrials.gov/study/"), pl.col("ref_id")
+                    )
+                )
+                .otherwise(pl.col("ref_url"))
+            ),
+            source=pl.col("ref_type"),
+            disease=pl.struct(
                 pl.col("efo_id").str.replace(":", "_").alias("diseaseId"),
                 pl.col("efo_term").str.to_lowercase().alias("diseaseFromSource"),
-            ).alias("disease"),
-            pl.struct(
+            ),
+            drug=pl.struct(
                 pl.col("pref_name").alias("drugFromSource"),
                 pl.col("chembl_id").alias("drugId"),
-            ).alias("drug"),
+            ),
+            type=pl.lit(ClinicalReportType.INDICATION.value),
         )
         .explode("id")
         .unique()

@@ -6,7 +6,11 @@ import polars as pl
 from omegaconf import DictConfig
 
 from clinical_mining.dataset import ClinicalReport
-from clinical_mining.schemas import ClinicalReportType, ClinicalSource
+from clinical_mining.schemas import (
+    ClinicalReportOrigin,
+    ClinicalReportType,
+    ClinicalSource,
+)
 
 
 def process_interventions(interventions: pl.DataFrame) -> pl.DataFrame:
@@ -177,12 +181,12 @@ def extract_clinical_report(
         )
         .with_columns(
             source=pl.lit(ClinicalSource.AACT.value),
+            type=pl.lit(ClinicalReportType.INDICATION.value),
             url=pl.concat_str(
                 [pl.lit("https://clinicaltrials.gov/study/"), pl.col("id")],
                 separator="",
             ),
-            hasExpertReview=pl.lit(False),
-            type=pl.lit(ClinicalReportType.CLINICAL_TRIAL),
+            origin=pl.lit(ClinicalReportOrigin.CLINICAL_TRIAL),
             phaseFromSource=pl.col("trial_phase"),
             disease=pl.struct(
                 pl.lit(None, dtype=pl.String).alias("diseaseId"),

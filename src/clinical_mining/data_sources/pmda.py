@@ -10,7 +10,7 @@ from ontoma.ner.disease import extract_disease_entities
 from pyspark.sql import SparkSession
 
 from clinical_mining.dataset import ClinicalReport
-from clinical_mining.schemas import ClinicalReportType
+from clinical_mining.schemas import ClinicalReportOrigin, ClinicalReportType
 from clinical_mining.utils.polars_helpers import convert_polars_to_spark
 
 # ============================================================================
@@ -371,7 +371,7 @@ def extract_clinical_report(
         )
         .select(
             phaseFromSource=pl.lit("approval"),
-            type=pl.lit(ClinicalReportType.REGULATORY),
+            origin=pl.lit(ClinicalReportOrigin.REGULATORY),
             drug=pl.struct(
                 pl.col("active_ingredients")
                 .str.strip_chars()
@@ -383,10 +383,10 @@ def extract_clinical_report(
                 pl.lit(None, dtype=pl.String).alias("diseaseId"),
                 pl.col("extracted_diseases").alias("diseaseFromSource"),
             ),
-            hasExpertReview=pl.lit(False),
             url=pl.lit(
                 "https://www.pmda.go.jp/english/review-services/reviews/approved-information/drugs/0001.html"
             ),
+            type=pl.lit(ClinicalReportType.INDICATION.value),
             source=pl.lit("PMDA"),
         )
         .with_columns(
