@@ -191,9 +191,13 @@ workflow:
           conditions: $conditions
           additional_metadata: ['$study_references', '$designs', '$brief_summaries', '$lead_sponsors', '$detailed_descriptions_rename']
           aggregation_specs:
-            pmid:
+            study_references:
               group_by: nct_id
               alias: literature
+              struct:
+                id: pmid
+                type: reference_type
+              agg: unique
             sponsor:
               group_by: nct_id
               alias: sponsor
@@ -228,16 +232,10 @@ workflow:
           df: $chembl_indication_report
           expr: "source != 'ClinicalTrials'"
 
-      chembl_withdrawn:
-        function: clinical_mining.utils.polars_helpers.filter_df
-        parameters:
-          df: $chembl_drug_warning_report
-          expr: "phaseFromSource == 'withdrawn'"
-
       all_reports:
         function: clinical_mining.utils.polars_helpers.union_dfs
         parameters:
-          dfs: [$aact_report, $ttd_report, $ema_report, $pmda_report, $chembl_indication_report_filter, $chembl_withdrawn]
+          dfs: [$aact_report, $ttd_report, $ema_report, $pmda_report, $chembl_indication_report_filter, $chembl_drug_warning_report]
 
       output_clinical_report:
         function: clinical_mining.dataset.ClinicalReport.map_entities

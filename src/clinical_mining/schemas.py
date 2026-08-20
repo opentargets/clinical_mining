@@ -77,13 +77,20 @@ class MappingStatus(str, Enum):
     UNMAPPED = "UNMAPPED"
 
 
-class ClinicalReportType(str, Enum):
-    """The type of the clinical record."""
+class ClinicalReportOrigin(str, Enum):
+    """The origin that describes the nature of the clinical record."""
 
     CLINICAL_TRIAL = "CLINICAL_TRIAL"
     DRUG_LABEL = "DRUG_LABEL"
     REGULATORY = "REGULATORY_AGENCY"
     CURATED_RESOURCE = "CURATED_RESOURCE"
+
+
+class ClinicalReportType(str, Enum):
+    """The type of evidence the clinical report describes."""
+
+    INDICATION = "INDICATION"
+    SAFETY = "SAFETY"
 
 
 class AssociatedDrug(BaseModel):
@@ -114,7 +121,12 @@ class ClinicalReportSchema(BaseModel):
     phaseFromSource: str | None = Field(
         default=None, description="The phase of the report at the source."
     )
-    type: ClinicalReportType = Field(description="The type of the report.")
+    origin: ClinicalReportOrigin = Field(
+        description="The type from which the report originates."
+    )
+    type: ClinicalReportType = Field(
+        description="The type of evidence the clinical report describes."
+    )
     year: int | None = Field(default=None, description="The year of the report.")
     countries: list[str] | None = Field(
         default=None, description="The countries where the report was conducted."
@@ -131,10 +143,6 @@ class ClinicalReportSchema(BaseModel):
     )
     sideEffects: list[AssociatedDisease] | None = Field(
         default=None, description="The side effects associated with the report."
-    )
-    hasExpertReview: bool = Field(
-        default=False,
-        description="Whether the report has been reviewed by an expert.",
     )
 
 

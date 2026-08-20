@@ -103,7 +103,7 @@ def build_publications_map(
     for record in records:
         nct_id = record["id"]
         trial_pmids = [
-            str(pmid) for pmid in (record.get("trialLiterature") or [])[:max_pubs]
+            str(ref["id"]) for ref in (record.get("trialLiterature") or [])[:max_pubs]
         ]
         if trial_pmids:
             selected_pmids_by_trial[nct_id] = trial_pmids

@@ -131,8 +131,17 @@ def test_fetch_publications_retries_on_incomplete_read(capsys):
 
 def test_build_publications_map_basic():
     records = [
-        {"id": "NCT00000001", "trialLiterature": [12345678, 99999999]},
-        {"id": "NCT00000002", "trialLiterature": [12345678]},
+        {
+            "id": "NCT00000001",
+            "trialLiterature": [
+                {"id": "12345678", "type": "result"},
+                {"id": "99999999", "type": "background"},
+            ],
+        },
+        {
+            "id": "NCT00000002",
+            "trialLiterature": [{"id": "12345678", "type": "result"}],
+        },
         {"id": "NCT00000003", "trialLiterature": None},
     ]
     pub_data = {
@@ -151,7 +160,12 @@ def test_build_publications_map_basic():
 
 
 def test_build_publications_map_respects_max_pubs():
-    records = [{"id": "NCT00000001", "trialLiterature": [1, 2, 3, 4, 5]}]
+    records = [
+        {
+            "id": "NCT00000001",
+            "trialLiterature": [{"id": str(i), "type": "result"} for i in range(1, 6)],
+        }
+    ]
     pub_data = {
         str(i): {"title": f"Paper {i}", "abstractText": f"Abs {i}"} for i in range(1, 6)
     }
@@ -165,8 +179,20 @@ def test_build_publications_map_respects_max_pubs():
 
 def test_build_publications_map_deduplicates_pmids():
     records = [
-        {"id": "NCT00000001", "trialLiterature": [111, 222]},
-        {"id": "NCT00000002", "trialLiterature": [222, 333]},
+        {
+            "id": "NCT00000001",
+            "trialLiterature": [
+                {"id": "111", "type": "result"},
+                {"id": "222", "type": "background"},
+            ],
+        },
+        {
+            "id": "NCT00000002",
+            "trialLiterature": [
+                {"id": "222", "type": "result"},
+                {"id": "333", "type": "result"},
+            ],
+        },
     ]
     with patch(
         "clinical_mining.data_sources.pubmed.fetch_publications", return_value={}
