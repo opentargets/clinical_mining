@@ -2,7 +2,7 @@
 # =================================================
 # RECIPE: Full Pipeline
 # =================================================
-# Loads all data sources (AACT, ChEMBL, TTD, EMA, PMDA), generates clinical
+# Loads data from all providers (AACT, ChEMBL, TTD, EMA, PMDA), generates clinical
 # reports, maps entities to ChEMBL/EFO IDs, and produces the final clinical
 # indication dataset.
 #
@@ -11,7 +11,7 @@
 # =================================================
 
 
-# Input Data Sources - loaded into a dataframe
+# Input data - loaded into a dataframe
 inputs:
   chembl_curation:
     format: parquet
@@ -141,17 +141,17 @@ workflow:
     # SETUP: Steps to prepare data needed by later stages
     setup:
       pmda_raw:
-        function: clinical_mining.data_sources.pmda.parse_pmda_approvals
+        function: clinical_mining.provider.pmda.parse_pmda_approvals
         parameters:
           pmda: ${datasets.pmda_path}
 
       ttd_raw:
-        function: clinical_mining.data_sources.ttd.extract_indication
+        function: clinical_mining.provider.ttd.extract_indication
         parameters:
           ttd_input: ${datasets.ttd_path}
         
       aact_batch_extraction:
-        function: clinical_mining.data_sources.aact.llm_extractor.parse_batch_results
+        function: clinical_mining.provider.aact.llm_extractor.parse_batch_results
         parameters:
           output_dir: ${datasets.llm_results}
 
@@ -170,21 +170,21 @@ workflow:
     # GENERATE: Steps that generate the core drug/indication DataFrames
     generate:
       chembl_indication_report:
-        function: clinical_mining.data_sources.chembl.indications.extract_clinical_report
+        function: clinical_mining.provider.chembl.indications.extract_clinical_report
         parameters:
           drug_indication: $drug_indication
           molecule_dictionary: $molecule_dictionary
           indication_refs: $indication_refs
 
       chembl_drug_warning_report:
-        function: clinical_mining.data_sources.chembl.drug_warnings.extract_clinical_report
+        function: clinical_mining.provider.chembl.drug_warnings.extract_clinical_report
         parameters:
           drug_warning: $drug_warning
           molecule_dictionary: $molecule_dictionary
           warning_refs: $warning_refs
 
       aact_report:
-        function: clinical_mining.data_sources.aact.extract_clinical_report
+        function: clinical_mining.provider.aact.extract_clinical_report
         parameters:
           studies: $studies
           interventions: $interventions
@@ -208,18 +208,18 @@ workflow:
           llm_extractions: $aact_batch_extraction
 
       ttd_report:
-        function: clinical_mining.data_sources.ttd.extract_clinical_report
+        function: clinical_mining.provider.ttd.extract_clinical_report
         parameters:
           indications: $ttd_raw
 
       ema_report:
-        function: clinical_mining.data_sources.ema.extract_clinical_report
+        function: clinical_mining.provider.ema.extract_clinical_report
         parameters:
           ema_input: ${datasets.ema_path}
           spark: $spark_session
 
       pmda_report:
-        function: clinical_mining.data_sources.pmda.extract_clinical_report
+        function: clinical_mining.provider.pmda.extract_clinical_report
         parameters:
           df: $pmda_raw
           spark: $spark_session

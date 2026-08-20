@@ -4,7 +4,7 @@ import polars as pl
 import pytest
 from pydantic import ValidationError
 
-from clinical_mining.data_sources.aact.llm_extractor import (
+from clinical_mining.provider.aact.llm_extractor import (
     _parse_single_record,
 )
 from clinical_mining.schemas import (
@@ -297,7 +297,7 @@ TRIAL_FIELDS = {
 
 
 def test_build_prompt_contains_id_and_trial_fields():
-    from clinical_mining.data_sources.aact.llm_extractor import build_prompt
+    from clinical_mining.provider.aact.llm_extractor import build_prompt
 
     row = {
         "id": "NCT04012606",
@@ -322,7 +322,7 @@ def test_build_prompt_contains_id_and_trial_fields():
 
 
 def test_build_prompt_handles_missing_trial_fields():
-    from clinical_mining.data_sources.aact.llm_extractor import build_prompt
+    from clinical_mining.provider.aact.llm_extractor import build_prompt
 
     row = {"id": "NCT00000001"}  # no trial_* fields
     prompt = build_prompt(row, trial_fields=TRIAL_FIELDS)
@@ -330,7 +330,7 @@ def test_build_prompt_handles_missing_trial_fields():
 
 
 def test_build_prompt_with_publications():
-    from clinical_mining.data_sources.aact.llm_extractor import build_prompt
+    from clinical_mining.provider.aact.llm_extractor import build_prompt
 
     row = {
         "id": "NCT04012606",
@@ -359,7 +359,7 @@ def test_build_prompt_with_publications():
 
 
 def test_build_prompt_includes_interventions():
-    from clinical_mining.data_sources.aact.llm_extractor import build_prompt
+    from clinical_mining.provider.aact.llm_extractor import build_prompt
 
     row = {
         "id": "NCT00000001",
@@ -375,7 +375,7 @@ def test_build_prompt_includes_interventions():
 
 
 def test_build_prompt_omits_interventions_when_empty():
-    from clinical_mining.data_sources.aact.llm_extractor import build_prompt
+    from clinical_mining.provider.aact.llm_extractor import build_prompt
 
     row = {"id": "NCT00000001", "drugs": []}
     assert "Interventions" not in build_prompt(row, trial_fields=TRIAL_FIELDS)
@@ -384,7 +384,7 @@ def test_build_prompt_omits_interventions_when_empty():
 
 
 def test_build_prompt_without_publications_omits_section():
-    from clinical_mining.data_sources.aact.llm_extractor import build_prompt
+    from clinical_mining.provider.aact.llm_extractor import build_prompt
 
     row = {"id": "NCT00000001"}
     assert "Publications" not in build_prompt(row, trial_fields=TRIAL_FIELDS)

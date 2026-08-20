@@ -1,4 +1,4 @@
-"""Backward-compatible re-exports for AACT data source."""
+"""Backward-compatible re-exports for the AACT provider."""
 
 from .clinical_report import (
     extract_clinical_report,

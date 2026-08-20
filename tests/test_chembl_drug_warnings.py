@@ -1,6 +1,6 @@
 import polars as pl
 
-from clinical_mining.data_sources.chembl.drug_warnings import extract_clinical_report
+from clinical_mining.provider.chembl.drug_warnings import extract_clinical_report
 
 
 def _make_drug_warning(**overrides) -> pl.DataFrame:

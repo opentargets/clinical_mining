@@ -1,7 +1,7 @@
 import polars as pl
 import pytest
 
-from clinical_mining.data_sources.ema import extract_marketing_year
+from clinical_mining.provider.ema import extract_marketing_year
 
 
 @pytest.mark.parametrize(
