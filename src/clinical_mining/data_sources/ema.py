@@ -6,7 +6,7 @@ from ontoma.ner.disease import extract_disease_entities
 from pyspark.sql import SparkSession
 
 from clinical_mining.dataset import ClinicalReport
-from clinical_mining.schemas import ClinicalReportOrigin
+from clinical_mining.schemas import ClinicalReportOrigin, ClinicalReportType
 from clinical_mining.utils.polars_helpers import convert_polars_to_spark
 
 
@@ -78,7 +78,8 @@ def extract_clinical_report(
         ner_extracted_indication.select(
             id=pl.col("EMA product number").str.to_lowercase(),
             phaseFromSource=pl.col("Medicine status").str.to_lowercase(),
-            origin=pl.lit(ClinicalReportOrigin.REGULATORY),
+            origin=pl.lit(ClinicalReportOrigin.REGULATORY.value),
+            type=pl.lit(ClinicalReportType.INDICATION.value),
             drugFromSource=pl.coalesce(
                 "International non-proprietary name (INN) / common name",
                 "Active substance",

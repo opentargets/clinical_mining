@@ -84,6 +84,7 @@ class ClinicalReportOrigin(str, Enum):
     DRUG_LABEL = "DRUG_LABEL"
     REGULATORY = "REGULATORY_AGENCY"
     CURATED_RESOURCE = "CURATED_RESOURCE"
+    OTHER = "OTHER"
 
 
 class ClinicalReportType(str, Enum):
@@ -134,7 +135,10 @@ class ClinicalReportSchema(BaseModel):
     url: str | None = Field(
         default=None, description="The URL of the report, e.g. in Dailymed."
     )
-    source: ClinicalSource = Field(description="The data source of the report.")
+    source: ClinicalSource = Field(description="The report primary source.")
+    provider: str = Field(
+        description="The resource or oganisation that distributes data fetched from a primary source."
+    )
     diseases: list[AssociatedDisease] | None = Field(
         default=None, description="The diseases associated with the report."
     )
@@ -144,9 +148,7 @@ class ClinicalReportSchema(BaseModel):
     sideEffects: list[AssociatedDisease] | None = Field(
         default=None, description="The side effects associated with the report."
     )
-
-
-# + optional trial metadata fields with the `trial` prefix. E.g. trialDescription
+    # + optional trial metadata fields with the `trial` prefix. E.g. trialDescription
 
 
 class ClinicalIndicationSchema(BaseModel):
