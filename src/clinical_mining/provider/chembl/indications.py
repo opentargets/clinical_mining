@@ -5,6 +5,7 @@ import polars as pl
 from clinical_mining.dataset import ClinicalReport
 from clinical_mining.dataset.clinical_report import APPROVAL_SOURCES
 from clinical_mining.schemas import (
+    ClinicalProvider,
     ClinicalReportOrigin,
     ClinicalReportType,
     ClinicalStageCategory,
@@ -78,6 +79,7 @@ def extract_clinical_report(
                 )
                 .otherwise(pl.col("ref_url"))
             ),
+            provider=pl.lit(ClinicalProvider.CHEMBL.value),
             source=pl.col("ref_type"),
             disease=pl.struct(
                 pl.col("efo_id").str.replace(":", "_").alias("diseaseId"),

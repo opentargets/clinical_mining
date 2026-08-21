@@ -38,14 +38,15 @@ def snake_to_camel(snake_str: str) -> str:
 class ClinicalSource(str, Enum):
     """The data source of the evidence."""
 
-    AACT = "AACT"
+    CLINICAL_TRIALS_GOV = "ClinicalTrials.gov"
     USAN = "USAN"
     EMA = "EMA"
     ATC = "ATC"
     INN = "INN"
+
     DailyMed = "DailyMed"
     FDA = "FDA"
-    EMA_Human_Drugs = "EMA Human Drugs"
+    EMA_HUMAN_DRUGS = "EMA Human Drugs"
     TTD = "TTD"
     PMDA = "PMDA"
 
@@ -77,6 +78,35 @@ class MappingStatus(str, Enum):
     UNMAPPED = "UNMAPPED"
 
 
+class ClinicalProvider(str, Enum):
+    """The resource or organisation that distributes data fetched from a primary source."""
+
+    AACT = "AACT"
+    CHEMBL = "ChEMBL"
+    EMA = "EMA"
+    PMDA = "PMDA"
+    TTD = "TTD"
+
+    @classmethod
+    def owns_source(cls, provider: str, source: str) -> bool:
+        """Return True if the provider distributes the source as its own first-party data.
+
+        Examples:
+            >>> ClinicalProvider.owns_source("EMA", "EMA Human Drugs")
+            True
+            >>> ClinicalProvider.owns_source("ChEMBL", "EMA")
+            False
+        """
+        owned: dict[str, set[str]] = {
+            cls.AACT.value: {ClinicalSource.CLINICAL_TRIALS_GOV.value},
+            cls.CHEMBL.value: set(),
+            cls.EMA.value: {ClinicalSource.EMA_HUMAN_DRUGS.value},
+            cls.PMDA.value: {ClinicalSource.PMDA.value},
+            cls.TTD.value: {ClinicalSource.TTD.value},
+        }
+        return source in owned.get(provider, set())
+
+
 class ClinicalReportOrigin(str, Enum):
     """The origin that describes the nature of the clinical record."""
 
@@ -84,6 +114,7 @@ class ClinicalReportOrigin(str, Enum):
     DRUG_LABEL = "DRUG_LABEL"
     REGULATORY = "REGULATORY_AGENCY"
     CURATED_RESOURCE = "CURATED_RESOURCE"
+    OTHER = "OTHER"
 
 
 class ClinicalReportType(str, Enum):
@@ -134,7 +165,10 @@ class ClinicalReportSchema(BaseModel):
     url: str | None = Field(
         default=None, description="The URL of the report, e.g. in Dailymed."
     )
-    source: ClinicalSource = Field(description="The data source of the report.")
+    source: ClinicalSource = Field(description="The report primary source.")
+    provider: ClinicalProvider = Field(
+        description="The resource or oganisation that distributes data fetched from a primary source."
+    )
     diseases: list[AssociatedDisease] | None = Field(
         default=None, description="The diseases associated with the report."
     )
@@ -144,9 +178,7 @@ class ClinicalReportSchema(BaseModel):
     sideEffects: list[AssociatedDisease] | None = Field(
         default=None, description="The side effects associated with the report."
     )
-
-
-# + optional trial metadata fields with the `trial` prefix. E.g. trialDescription
+    # + optional trial metadata fields with the `trial` prefix. E.g. trialDescription
 
 
 class ClinicalIndicationSchema(BaseModel):

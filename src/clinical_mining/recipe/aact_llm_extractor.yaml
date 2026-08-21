@@ -13,7 +13,7 @@
 #       workflow.transform.generate.output_llm_extraction.parameters.inspect_mode=true
 # =================================================
 
-# Input Data Sources
+# Input data
 inputs:
   studies:
     format: db_table
@@ -61,7 +61,7 @@ workflow:
   transform:
     setup:
       clinical_report:
-        function: clinical_mining.data_sources.aact.extract_clinical_report
+        function: clinical_mining.provider.aact.extract_clinical_report
         parameters:
           studies: $studies
           interventions: $interventions
@@ -78,27 +78,27 @@ workflow:
 
     generate:
       filtered_report:
-        function: clinical_mining.data_sources.aact.llm_extractor.filter_by_id
+        function: clinical_mining.provider.aact.llm_extractor.filter_by_id
         parameters:
           report: $clinical_report
           id_value: null
 
       sampled_report:
-        function: clinical_mining.data_sources.aact.llm_extractor.sample_report
+        function: clinical_mining.provider.aact.llm_extractor.sample_report
         parameters:
           report: $filtered_report
           sample_size: 100
           seed: 42
 
       publications_map:
-        function: clinical_mining.data_sources.aact.llm_extractor.fetch_publications
+        function: clinical_mining.provider.aact.llm_extractor.fetch_publications
         parameters:
           report: $sampled_report
           max_publications: 1
           enabled: true
 
       prompts:
-        function: clinical_mining.data_sources.aact.llm_extractor.build_prompts
+        function: clinical_mining.provider.aact.llm_extractor.build_prompts
         parameters:
           report: $sampled_report
           trial_fields:

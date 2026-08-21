@@ -1,7 +1,7 @@
 import polars as pl
 import pytest
 
-from clinical_mining.data_sources.pmda import extract_approval_year
+from clinical_mining.provider.pmda import extract_approval_year
 
 
 @pytest.mark.parametrize(
@@ -33,7 +33,7 @@ def test_extract_approval_year_in_select():
 
 def test_find_column_structure_detects_reversed_date_header():
     """Pages 185-196 use 'Date of approval' instead of 'Approval Date'."""
-    from clinical_mining.data_sources.pmda import find_column_structure
+    from clinical_mining.provider.pmda import find_column_structure
 
     header = [
         "Category",

@@ -8,8 +8,8 @@ import fsspec
 import polars as pl
 from loguru import logger
 
-from clinical_mining.data_sources.pubmed import build_publications_map
 from clinical_mining.dataset import ClinicalReportExtraction
+from clinical_mining.provider.pubmed import build_publications_map
 from clinical_mining.schemas import (
     ClinicalReportExtractionSchema,
     ExtractedDisease,

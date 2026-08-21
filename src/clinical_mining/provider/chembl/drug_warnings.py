@@ -4,6 +4,7 @@ import polars as pl
 
 from clinical_mining.dataset import ClinicalReport
 from clinical_mining.schemas import (
+    ClinicalProvider,
     ClinicalReportOrigin,
     ClinicalReportType,
     ClinicalSource,
@@ -73,6 +74,7 @@ def extract_clinical_report(
             year=pl.col("warning_year"),
             countries=pl.col("warning_country").str.split(";"),
             source=pl.col("ref_type"),
+            provider=pl.lit(ClinicalProvider.CHEMBL.value),
             url=pl.col("ref_url"),
         )
         .unique()

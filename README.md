@@ -53,7 +53,7 @@ Run `uv run clinical_mining --help` to see available recipes.
 
 #### 1. Clinical Report Generation
 
-Loads all data sources (AACT, ChEMBL, TTD, EMA, PMDA), generates clinical reports, maps entities to ChEMBL/EFO IDs, and produces the final clinical indication dataset.
+Loads data from all providers (AACT, ChEMBL, TTD, EMA, PMDA), generates clinical reports, maps entities to ChEMBL/EFO IDs, and produces the final clinical indication dataset.
 
 ```bash
 uv run clinical_mining +recipe=clinical_report_generation

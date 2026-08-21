@@ -3,6 +3,7 @@ from pyspark.sql import DataFrame, SparkSession
 
 from clinical_mining.dataset.clinical_indication import CATEGORY_RANKS_STR
 from clinical_mining.schemas import (
+    ClinicalProvider,
     ClinicalReportSchema,
     ClinicalStageCategory,
     snake_to_camel,
@@ -171,17 +172,33 @@ class ClinicalReport:
 
     @classmethod
     def drop_duplicates(cls, df: pl.DataFrame) -> pl.DataFrame:
-        """Drop duplicate reports based on clinical stage."""
+        """Drop duplicate reports based on clinical stage.
+
+        When multiple rows share the same ``id`` and have equal clinical
+        stage, prefer the report whose provider is the first-party
+        distributor of its source (``ClinicalProvider.owns_source``).
+        This is relevant for EMA references, where both `EMA` and `ChEMBL` providers
+        capture the same IDs.
+        """
         return (
             df.with_columns(
                 clinicalStageRank=pl.col("clinicalStage").replace_strict(
                     CATEGORY_RANKS_STR,
                     default=CATEGORY_RANKS_STR[ClinicalStageCategory.UNKNOWN.value],
-                )
+                ),
+                providerPriority=pl.struct(["provider", "source"]).map_elements(
+                    lambda r: (
+                        0
+                        if r["provider"] is not None
+                        and ClinicalProvider.owns_source(r["provider"], r["source"])
+                        else 1
+                    ),
+                    return_dtype=pl.Int8,
+                ),
             )
-            .sort(["id", "clinicalStageRank"])
+            .sort(["id", "clinicalStageRank", "providerPriority"])
             .unique(subset=["id"], keep="first")
-            .drop("clinicalStageRank")
+            .drop("clinicalStageRank", "providerPriority")
         )
 
     @classmethod

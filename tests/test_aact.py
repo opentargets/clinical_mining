@@ -35,8 +35,21 @@ def _make_conditions() -> pl.DataFrame:
     )
 
 
+def test_source_and_provider():
+    from clinical_mining.provider.aact import extract_clinical_report
+
+    result = extract_clinical_report(
+        studies=_make_studies(),
+        interventions=_make_interventions(),
+        conditions=_make_conditions(),
+    )
+
+    assert result.df["source"].to_list() == ["ClinicalTrials.gov"]
+    assert result.df["provider"].to_list() == ["AACT"]
+
+
 def test_detailed_descriptions_column_present():
-    from clinical_mining.data_sources.aact import extract_clinical_report
+    from clinical_mining.provider.aact import extract_clinical_report
 
     detailed_descriptions = pl.DataFrame(
         {
@@ -59,7 +72,7 @@ def test_detailed_descriptions_column_present():
 
 
 def test_no_detailed_descriptions_column_absent():
-    from clinical_mining.data_sources.aact import extract_clinical_report
+    from clinical_mining.provider.aact import extract_clinical_report
 
     result = extract_clinical_report(
         studies=_make_studies(),
@@ -71,7 +84,7 @@ def test_no_detailed_descriptions_column_absent():
 
 
 def test_detailed_description_value_preserved():
-    from clinical_mining.data_sources.aact import extract_clinical_report
+    from clinical_mining.provider.aact import extract_clinical_report
 
     detailed_descriptions = pl.DataFrame(
         {
@@ -96,7 +109,7 @@ def test_detailed_description_value_preserved():
 
 def test_replace_with_llm_indications():
     """Test that LLM indications replace source indications for LLM-covered trials."""
-    from clinical_mining.data_sources.aact.clinical_report import (
+    from clinical_mining.provider.aact.clinical_report import (
         replace_with_llm_indications,
     )
 
@@ -215,7 +228,7 @@ def test_replace_with_llm_indications():
 
 
 def test_extract_clinical_report_with_sponsors():
-    from clinical_mining.data_sources.aact import extract_clinical_report
+    from clinical_mining.provider.aact import extract_clinical_report
 
     sponsors = pl.DataFrame(
         {
@@ -256,7 +269,7 @@ def test_extract_clinical_report_with_sponsors():
 
 
 def test_extract_clinical_report_with_study_references():
-    from clinical_mining.data_sources.aact import extract_clinical_report
+    from clinical_mining.provider.aact import extract_clinical_report
 
     study_references = pl.DataFrame(
         {

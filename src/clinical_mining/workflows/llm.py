@@ -318,7 +318,7 @@ def write_batch_files(
     """Prepare batches of JSON lines to submit to the OpenAI Batch API.
 
     Args:
-        prompts (list[dict]): Preformed prompts with the query (e.g., the output of `data_sources.aact.llm_extractor.build_prompts`)
+        prompts (list[dict]): Preformed prompts with the query (e.g., the output of `provider.aact.llm_extractor.build_prompts`)
         system_prompt_path (str): Path to the system prompt file
         model_class (str): Pydantic class with the output schema (e.g., 'clinical_mining.schemas.ClinicalReportExtractionSchema')
         out_dir (Path): Directory to write batch files
